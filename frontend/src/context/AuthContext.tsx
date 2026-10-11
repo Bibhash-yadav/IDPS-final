@@ -22,6 +22,7 @@ interface AuthContextValue {
   login: (data: LoginData) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -64,6 +65,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [saveAuth],
   );
 
+  // Refresh the current user's data from the backend.
+  // The backend should return date_of_birth and a DOB-derived age.
+  const refreshUser = useCallback(async () => {
+    const token = sessionStorage.getItem("idps_token");
+
+    if (!token) {
+      setUser(null);
+      return;
+    }
+
+    const response = await api.get<User>("/api/auth/me");
+    setUser(response.data);
+  }, []);
+
   useEffect(() => {
     let active = true;
 
@@ -71,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = sessionStorage.getItem("idps_token");
 
       if (!token) {
-        setLoading(false);
+        if (active) setLoading(false);
         return;
       }
 
@@ -82,11 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(response.data);
         }
       } catch {
-        sessionStorage.removeItem("idps_token");
+        // A temporary network/server error should not automatically
+        // destroy the token. Clear it only for an authentication failure.
+        if (!active) return;
 
-        if (active) {
-          setUser(null);
-        }
+        setUser(null);
       } finally {
         if (active) {
           setLoading(false);
@@ -103,7 +118,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout }}
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

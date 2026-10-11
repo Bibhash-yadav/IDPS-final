@@ -7,5 +7,7 @@ __all__ = [
     "dashboard",
     "events",
     "protection",
-    "protection_settings"
+    "protection_settings",
+    "extension_download",
+
 ]

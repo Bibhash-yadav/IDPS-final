@@ -1,25 +1,76 @@
-<!DOCTYPE html>
-<html>
+
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IDPS Shield</title>
-  <style>
-    body { width: 300px; margin: 0; padding: 16px; background: #090d16; color: #f8fafc; font-family: sans-serif; }
-    h2 { font-size: 14px; margin-top: 0; color: #38bdf8; display: flex; align-items: center; gap: 6px; }
-    .status { background: #064e3b; color: #34d399; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; margin-bottom: 12px; text-align: center; }
-    .stats { font-size: 12px; color: #94a3b8; margin-bottom: 16px; line-height: 1.5; }
-    button { width: 100%; background: #0284c7; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-    button:hover { background: #0ea5e9; }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h2>🛡️ IDPS SHIELD</h2>
-  <div class="status">PROTECTION: ● ACTIVE</div>
-  <div class="stats">
-    <div>Today's URLs Checked: <strong>43</strong></div>
-    <div>Threats Blocked: <strong>4</strong></div>
-    <div>Warnings Issued: <strong>7</strong></div>
-  </div>
-  <button onclick="window.open('http://localhost:5173/dashboard')">OPEN DASHBOARD</button>
+  <main class="app">
+    <header class="header">
+      <div class="brand-icon">🛡️</div>
+      <div>
+        <h1>IDPS Shield</h1>
+        <p>Browser Protection</p>
+      </div>
+      <span id="statusDot" class="dot"></span>
+    </header>
+
+    <section class="protection">
+      <div>
+        <span class="eyebrow">PROTECTION STATUS</span>
+        <h2 id="protectionStatus">Checking…</h2>
+        <p id="configurationMessage">Connecting to your IDPS setup.</p>
+      </div>
+      <label class="switch">
+        <input id="protectionToggle" type="checkbox">
+        <span class="slider"></span>
+      </label>
+    </section>
+
+    <section class="website">
+      <span class="eyebrow">CURRENT WEBSITE</span>
+      <h3 id="domain">No website selected</h3>
+      <p id="url">Open a website to check it.</p>
+    </section>
+
+    <button id="checkButton" class="primary">
+      Check Current Website
+    </button>
+
+    <section id="resultCard" class="result hidden">
+      <div class="result-heading">
+        <span id="resultIcon" class="result-icon">●</span>
+        <div>
+          <h3 id="resultTitle">Assessment</h3>
+          <p id="resultSubtitle"></p>
+        </div>
+      </div>
+
+      <div class="score-row">
+        <span>Risk score</span>
+        <strong id="riskScore">—/100</strong>
+      </div>
+
+      <div class="meter">
+        <div id="scoreMeter"></div>
+      </div>
+
+      <p id="resultExplanation" class="explanation"></p>
+
+      <ul id="reasonList"></ul>
+    </section>
+
+    <p id="errorMessage" class="error hidden"></p>
+
+    <footer>
+      <button id="settingsButton" class="secondary">Extension Settings</button>
+      <p>Local heuristics are indicators, not a guarantee of safety.</p>
+    </footer>
+  </main>
+
+  <script src="popup.js"></script>
 </body>
 </html>

@@ -1,0 +1,293 @@
+
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #080d18;
+  color: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 370px;
+  min-height: 500px;
+  margin: 0;
+  background: #080d18;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app {
+  padding: 18px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #243146;
+}
+
+.brand-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #164e63;
+  border-radius: 14px;
+  background: #0e2937;
+  font-size: 23px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.header p,
+.website p,
+.protection p,
+footer p {
+  margin: 5px 0 0;
+  color: #8da2bf;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.dot.active {
+  background: #34d399;
+  box-shadow: 0 0 12px #34d39966;
+}
+
+.protection,
+.website,
+.result {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #243146;
+  border-radius: 16px;
+  background: #0d1626;
+}
+
+.protection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.eyebrow {
+  color: #8da2bf;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.1px;
+}
+
+.protection h2 {
+  margin: 7px 0 0;
+  font-size: 17px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  border-radius: 20px;
+  background: #475569;
+  transition: 0.2s;
+}
+
+.slider::before {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  content: "";
+  transition: 0.2s;
+}
+
+.switch input:checked + .slider {
+  background: #0891b2;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(18px);
+}
+
+.website h3 {
+  margin: 8px 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.primary,
+.secondary {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 11px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.primary {
+  border: 1px solid #0891b2;
+  background: #0891b2;
+  color: #04111b;
+}
+
+.primary:hover {
+  background: #22d3ee;
+}
+
+.primary:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.secondary {
+  border: 1px solid #334155;
+  background: #111c2d;
+  color: #e2e8f0;
+}
+
+.result-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.result-icon {
+  font-size: 26px;
+}
+
+.result h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.result-heading p,
+.explanation {
+  margin: 5px 0 0;
+  color: #a8b7cb;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.result.safe {
+  border-color: #065f46;
+}
+
+.result.safe .result-icon,
+.result.safe .result-heading h3 {
+  color: #34d399;
+}
+
+.result.warn {
+  border-color: #854d0e;
+}
+
+.result.warn .result-icon,
+.result.warn .result-heading h3 {
+  color: #fbbf24;
+}
+
+.result.danger {
+  border-color: #991b1b;
+}
+
+.result.danger .result-icon,
+.result.danger .result-heading h3 {
+  color: #f87171;
+}
+
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.score-row strong {
+  color: #f8fafc;
+}
+
+.meter {
+  height: 6px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #263449;
+}
+
+.meter div {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #34d399;
+  transition: width 0.25s;
+}
+
+.result ul {
+  padding-left: 18px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  padding: 12px;
+  border: 1px solid #7f1d1d;
+  border-radius: 10px;
+  background: #2a1118;
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.hidden {
+  display: none !important;
+}
+
+footer {
+  margin-top: 18px;
+  text-align: center;
+}
+
+footer p {
+  line-height: 1.6;
+}

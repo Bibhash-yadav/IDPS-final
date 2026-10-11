@@ -4,6 +4,12 @@ export interface User {
   name: string;
   email: string;
   role: string;
+
+  // Saved date of birth in YYYY-MM-DD format
+  date_of_birth: string | null;
+
+  // Age calculated from date_of_birth by the backend
+  age: number | null;
 }
 
 export interface AuthResponse {
@@ -21,4 +27,7 @@ export interface RegisterData {
   name: string;
   email: string;
   password: string;
+
+  // Required during new account registration
+  date_of_birth: string;
 }

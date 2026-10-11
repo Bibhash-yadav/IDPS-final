@@ -1,0 +1,119 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>IDPS Shield — Extension Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="page">
+    <header class="brand">
+      <div class="brand-icon" aria-hidden="true">🛡</div>
+      <div>
+        <p class="eyebrow">IDPS SHIELD</p>
+        <h1>Browser Protection</h1>
+        <p class="subtitle">Connect your account to protect your browsing.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <h2>Your IDPS account</h2>
+          <p>Sign in with your existing IDPS account.</p>
+        </div>
+        <span id="statusBadge" class="badge pending">Not connected</span>
+      </div>
+
+      <div id="connectionPanel" class="connection-panel">
+        <span id="statusDot" class="status-dot"></span>
+        <div>
+          <strong id="statusTitle">Connection required</strong>
+          <p id="statusDescription">Sign in to connect this extension.</p>
+        </div>
+      </div>
+
+      <form id="loginForm">
+        <label for="email">Email address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autocomplete="username"
+          placeholder="you@example.com"
+          required
+        >
+
+        <label for="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Your IDPS password"
+          required
+        >
+
+        <button id="loginButton" type="submit">
+          Sign in and connect
+        </button>
+      </form>
+
+      <button id="disconnectButton" class="button-secondary" type="button" hidden>
+        Disconnect account
+      </button>
+
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <h2>Protection settings</h2>
+          <p>Configure the extension's local behavior.</p>
+        </div>
+      </div>
+
+      <form id="settingsForm">
+        <label for="apiUrl">Backend API URL</label>
+        <input
+          id="apiUrl"
+          type="url"
+          value="http://127.0.0.1:8000"
+          placeholder="http://127.0.0.1:8000"
+          required
+        >
+        <p class="hint">
+          Local testing only works while your backend is running on this computer.
+          Other users must enter a backend URL reachable from their own browser.
+        </p>
+
+        <label for="age">Age for policy checks</label>
+        <input id="age" type="number" min="1" max="120" value="18" required>
+
+        <label class="toggle-row" for="protectionEnabled">
+          <span>
+            <strong>Navigation checks</strong>
+            <small>Analyze supported website navigations.</small>
+          </span>
+          <input id="protectionEnabled" type="checkbox" checked>
+        </label>
+
+        <button id="saveButton" type="submit" class="button-secondary">
+          Save protection settings
+        </button>
+      </form>
+    </section>
+
+    <footer>
+      <p>Access tokens are stored in local extension storage.</p>
+      <p>HTTPS does not guarantee that a website is trustworthy.</p>
+    </footer>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>

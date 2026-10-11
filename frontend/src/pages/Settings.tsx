@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   ShieldCheck,
@@ -8,8 +9,11 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  Chrome,
 } from "lucide-react";
+
 import api from "../services/api";
+import DownloadExtensionButton from "../components/DownloadExtensionButton";
 
 interface ProtectionSettings {
   safe_browsing: boolean;
@@ -47,7 +51,10 @@ export default function Settings() {
         );
 
         if (active) {
-          setSettings(response.data);
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...response.data,
+          });
         }
       } catch (err: any) {
         if (active) {
@@ -63,7 +70,7 @@ export default function Settings() {
       }
     }
 
-    loadSettings();
+    void loadSettings();
 
     return () => {
       active = false;
@@ -84,6 +91,15 @@ export default function Settings() {
   }
 
   async function saveSettings() {
+    if (
+      !Number.isInteger(settings.minimum_age) ||
+      settings.minimum_age < 1 ||
+      settings.minimum_age > 120
+    ) {
+      setError("Minimum age must be an integer between 1 and 120.");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setSuccess("");
@@ -94,7 +110,11 @@ export default function Settings() {
         settings
       );
 
-      setSettings(response.data);
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...response.data,
+      });
+
       setSuccess("Protection settings saved successfully.");
     } catch (err: any) {
       setError(
@@ -122,54 +142,105 @@ export default function Settings() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 text-slate-900 sm:p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 text-slate-100 sm:p-6">
+      {/* Page heading */}
       <div>
         <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-cyan-400">
             <ShieldCheck size={27} />
           </div>
 
           <div>
             <h1 className="text-2xl font-bold">Security Settings</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Configure your personal IDPS protection preferences.
+            <p className="mt-1 text-sm text-slate-400">
+              Manage browsing protection and your browser extension.
             </p>
           </div>
         </div>
       </div>
 
+      {/* Error message */}
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"
         >
           <AlertCircle className="mt-0.5 shrink-0" size={19} />
           <p>{error}</p>
         </div>
       )}
 
+      {/* Success message */}
       {success && (
         <div
           role="status"
-          className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+          className="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300"
         >
           <CheckCircle2 className="mt-0.5 shrink-0" size={19} />
           <p>{success}</p>
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      {/* Browser extension download */}
+      <section className="rounded-2xl border border-cyan-500/20 bg-slate-900 p-5 shadow-lg sm:p-6">
         <div className="mb-5 flex items-center gap-3">
-          <ShieldCheck className="text-blue-600" size={22} />
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-cyan-300">
+            <Chrome size={25} />
+          </div>
+
+          <div>
+            <h2 className="text-lg font-semibold">
+              IDPS Shield Browser Extension
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Add website security checks to your Chrome browsing workflow.
+            </p>
+          </div>
+        </div>
+
+        <DownloadExtensionButton />
+
+        <div className="mt-5 rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <h3 className="font-medium text-slate-200">
+            How to install
+          </h3>
+
+          <ol className="mt-3 list-inside list-decimal space-y-2 text-sm leading-6 text-slate-400">
+            <li>Download the extension ZIP file.</li>
+            <li>Extract the ZIP into a folder on your computer.</li>
+            <li>Open Chrome and visit chrome://extensions.</li>
+            <li>Enable Developer mode.</li>
+            <li>
+              Select Load unpacked and choose the extracted folder
+              containing manifest.json.
+            </li>
+            <li>
+              Configure the backend URL and access token in the extension
+              if required.
+            </li>
+          </ol>
+        </div>
+
+        <p className="mt-4 text-xs leading-5 text-slate-500">
+          The extension uses the detection rules and API that are actually
+          configured. A failed scan does not mean a website is safe.
+        </p>
+      </section>
+
+      {/* Web protection settings */}
+      <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-sm sm:p-6">
+        <div className="mb-5 flex items-center gap-3">
+          <ShieldCheck className="text-cyan-400" size={22} />
+
           <div>
             <h2 className="font-semibold">Web Protection</h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-400">
               Choose your preferred browsing protection options.
             </p>
           </div>
         </div>
 
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-800">
           <SettingToggle
             title="Safe Browsing"
             description="Enable the safe-browsing preference for website checks."
@@ -190,30 +261,31 @@ export default function Settings() {
 
           <SettingToggle
             title="Age Restriction"
-            description="Enable the age-policy preference for website checks."
+            description="Enable the age-policy preference for supported website checks."
             checked={settings.age_restriction}
             onChange={(value) =>
               updateSetting("age_restriction", value)
             }
           />
         </div>
-      </div>
+      </section>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      {/* Age policy */}
+      <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-sm sm:p-6">
         <div className="mb-5 flex items-center gap-3">
-          <UserRound className="text-blue-600" size={22} />
+          <UserRound className="text-cyan-400" size={22} />
 
           <div>
             <h2 className="font-semibold">Age Policy</h2>
-            <p className="text-sm text-slate-500">
-              Set the minimum age preference for supported age checks.
+            <p className="text-sm text-slate-400">
+              Set your preferred minimum age for supported policy checks.
             </p>
           </div>
         </div>
 
         <label
           htmlFor="minimum-age"
-          className="mb-2 block text-sm font-medium text-slate-700"
+          className="mb-2 block text-sm font-medium text-slate-300"
         >
           Minimum age
         </label>
@@ -234,21 +306,21 @@ export default function Settings() {
                 Number.isFinite(value) ? value : 18
               );
             }}
-            className="w-full rounded-lg border border-slate-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-white outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
           />
 
-          <span className="text-sm text-slate-500">years</span>
+          <span className="text-sm text-slate-400">years</span>
         </div>
 
         {!settings.age_restriction && (
-          <p className="mt-3 text-xs text-slate-500">
-            Age Restriction is currently disabled. Your minimum-age
-            preference will be saved but will not itself establish a
-            website's actual age requirement.
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            Age Restriction is currently disabled. Saving a minimum age
+            does not establish a website's actual age requirement.
           </p>
         )}
-      </div>
+      </section>
 
+      {/* Save and reset */}
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -259,7 +331,7 @@ export default function Settings() {
             settings.minimum_age > 120 ||
             !Number.isInteger(settings.minimum_age)
           }
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-5 py-3 font-medium text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? (
             <Loader2 className="animate-spin" size={18} />
@@ -273,20 +345,20 @@ export default function Settings() {
           type="button"
           onClick={resetSettings}
           disabled={saving}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-5 py-3 font-medium text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
         >
           <RotateCcw size={17} />
           Reset Form
         </button>
       </div>
 
-      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+      {/* Security note */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
         <ShieldAlert className="mt-0.5 shrink-0" size={19} />
-        <p>
-          These preferences are saved to your account. Enforcement
-          depends on the backend integration and the available website
-          detection sources. A saved age setting alone does not verify
-          a website's age restriction.
+        <p className="leading-6">
+          These preferences are saved to your account. Actual enforcement
+          depends on the backend implementation and available detection
+          sources. HTTPS alone does not prove a website is trustworthy.
         </p>
       </div>
     </div>
@@ -309,10 +381,10 @@ function SettingToggle({
   return (
     <div className="flex items-center justify-between gap-4 py-5">
       <div>
-        <h3 className="text-sm font-medium text-slate-800">
+        <h3 className="text-sm font-medium text-slate-200">
           {title}
         </h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm leading-5 text-slate-400">
           {description}
         </p>
       </div>
@@ -324,7 +396,7 @@ function SettingToggle({
         aria-label={title}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-          checked ? "bg-blue-600" : "bg-slate-300"
+          checked ? "bg-cyan-500" : "bg-slate-600"
         }`}
       >
         <span

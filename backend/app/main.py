@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import auth, url_check, dashboard, events, protection, protection_settings
-
+from app.routes.extension_download import router as extension_download_router
 
 app = FastAPI(
     title="AI-Powered Intelligent Cyber Defense System",
@@ -43,3 +43,4 @@ app.include_router(dashboard.router)
 app.include_router(events.router)
 app.include_router(protection.router)
 app.include_router(protection_settings.router)
+app.include_router(extension_download_router)

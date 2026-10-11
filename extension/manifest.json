@@ -1,18 +1,40 @@
+
 {
   "manifest_version": 3,
-  "name": "IDPS Shield",
-  "version": "1.0.0",
-  "description": "AI-Powered Intelligent Cyber Defense System Browser Extension",
+  "name": "IDPS Shield - Cyber Defense",
+  "version": "1.2.0",
+  "description": "Analyze website URLs, detect potential threats, and help protect browsing using the IDPS Shield security backend.",
   "permissions": [
-    "activeTab",
     "storage",
-    "webNavigation"
+    "tabs",
+    "webNavigation",
+    "notifications",
+    "declarativeNetRequest"
   ],
-  "action": {
-    "default_popup": "popup/popup.html",
-    "default_icon": "icons/icon.png"
-  },
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "action": {
+    "default_title": "IDPS Shield - Browser Protection",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options/options.html"
 }

@@ -1,0 +1,45 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Website blocked | IDPS Shield</title>
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <main class="card">
+    <div class="icon">⛔</div>
+    <p class="eyebrow">IDPS SHIELD · CYBER DEFENSE</p>
+    <h1>Navigation blocked</h1>
+    <p class="intro">
+      The configured IDPS security checks returned a BLOCK decision.
+      Avoid continuing unless you have independently verified the destination.
+    </p>
+
+    <section>
+      <h2>Requested website</h2>
+      <p id="requestedUrl" class="url"></p>
+    </section>
+
+    <section>
+      <h2>Detection details</h2>
+      <ul id="reasons"></ul>
+    </section>
+
+    <div class="actions">
+      <button id="backButton">Go back</button>
+      <button id="continueButton" class="secondary">
+        Continue anyway
+      </button>
+    </div>
+
+    <p class="notice">
+      Continuing may expose you to malicious content. IDPS assessments
+      are heuristic and may be incomplete.
+    </p>
+  </main>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

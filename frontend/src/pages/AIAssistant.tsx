@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -6,16 +5,13 @@ import {
   ArrowDown,
   ArrowRight,
   Bot,
-  Check,
   CheckCircle2,
   Clock3,
-  ExternalLink,
   Fingerprint,
   Globe,
   Info,
   LockKeyhole,
   MessageSquare,
-  RotateCcw,
   ScanSearch,
   Send,
   Shield,
@@ -27,7 +23,9 @@ import {
   Wifi,
   XCircle,
 } from "lucide-react";
+
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 type URLCheckResult = {
   check_id?: number;
@@ -44,6 +42,9 @@ type URLCheckResult = {
   ssl_status?: string;
   safe_browsing_enabled?: boolean;
   strict_mode_enabled?: boolean;
+  user_age?: number;
+  age_decision?: string;
+  required_age?: number;
   malware?: {
     malware_detected?: boolean;
     detected?: boolean;
@@ -93,6 +94,49 @@ const QUICK_ACTIONS = [
   },
 ];
 
+function calculateAge(
+  dateOfBirth: string | null | undefined
+): number | null {
+  if (!dateOfBirth) return null;
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+    dateOfBirth
+  );
+
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  const dob = new Date(year, month - 1, day);
+
+  // Reject invalid dates such as 2020-02-31.
+  if (
+    dob.getFullYear() !== year ||
+    dob.getMonth() !== month - 1 ||
+    dob.getDate() !== day
+  ) {
+    return null;
+  }
+
+  const today = new Date();
+
+  if (dob > today || year < 1900) return null;
+
+  let age = today.getFullYear() - year;
+
+  if (
+    today.getMonth() < month - 1 ||
+    (today.getMonth() === month - 1 &&
+      today.getDate() < day)
+  ) {
+    age--;
+  }
+
+  return age >= 0 && age <= 120 ? age : null;
+}
+
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString([], {
     hour: "2-digit",
@@ -103,9 +147,17 @@ function formatTime(value: string) {
 function decisionOf(result: URLCheckResult) {
   const decision = (result.decision || "").toUpperCase();
 
-  if (["ALLOW", "ALLOWED"].includes(decision)) return "ALLOW";
-  if (["BLOCK", "BLOCKED"].includes(decision)) return "BLOCK";
-  if (["WARN", "WARNING"].includes(decision)) return "WARN";
+  if (["ALLOW", "ALLOWED"].includes(decision)) {
+    return "ALLOW";
+  }
+
+  if (["BLOCK", "BLOCKED"].includes(decision)) {
+    return "BLOCK";
+  }
+
+  if (["WARN", "WARNING"].includes(decision)) {
+    return "WARN";
+  }
 
   return "UNKNOWN";
 }
@@ -154,7 +206,7 @@ function getDecisionPresentation(decision: string) {
     label: "Decision unavailable",
     shortLabel: "UNKNOWN",
     description:
-      "The server returned an unrecognized decision. Review the raw API result.",
+      "The server returned an unrecognized decision. Review the API response.",
     color: "text-slate-300",
     border: "border-slate-700",
     surface: "bg-slate-800/50",
@@ -169,39 +221,31 @@ function getRiskPresentation(level: string) {
         color: "text-red-300",
         bar: "bg-red-500",
       };
+
     case "HIGH":
       return {
         color: "text-orange-300",
         bar: "bg-orange-500",
       };
+
     case "MEDIUM":
       return {
         color: "text-amber-300",
         bar: "bg-amber-500",
       };
+
     case "LOW":
       return {
         color: "text-emerald-300",
         bar: "bg-emerald-500",
       };
+
     default:
       return {
         color: "text-slate-300",
         bar: "bg-slate-500",
       };
   }
-}
-
-function isURLInput(value: string) {
-  const trimmed = value.trim();
-
-  return (
-    /^(https?:\/\/)?localhost(?::\d+)?(?:\/|$)/i.test(trimmed) ||
-    /^(https?:\/\/)?(?:\[[0-9a-f:]+\]|(?:\d{1,3}\.){3}\d{1,3})(?::\d+)?(?:\/|$)/i.test(
-      trimmed,
-    ) ||
-    /^(https?:\/\/)?[^\s/]+\.[^\s/]+(?:\/[^\s]*)?$/i.test(trimmed)
-  );
 }
 
 function normalizeURLInput(value: string) {
@@ -214,32 +258,71 @@ function normalizeURLInput(value: string) {
   return `https://${trimmed}`;
 }
 
+function isURLInput(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed || /\s/.test(trimmed)) return false;
+
+  try {
+    const normalized = normalizeURLInput(trimmed);
+    const parsed = new URL(normalized);
+
+    return (
+      ["http:", "https:"].includes(parsed.protocol) &&
+      Boolean(parsed.hostname.includes(".") ||
+        parsed.hostname === "localhost" ||
+        /^\d{1,3}(\.\d{1,3}){3}$/.test(parsed.hostname) ||
+        parsed.hostname.startsWith("["))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function uniqueReasons(reasons?: string[]) {
   if (!Array.isArray(reasons)) return [];
 
   return Array.from(
     new Set(
       reasons.filter(
-        (reason) => typeof reason === "string" && reason.trim().length > 0,
-      ),
-    ),
+        (reason) =>
+          typeof reason === "string" &&
+          reason.trim().length > 0
+      )
+    )
   );
 }
 
-function ResultCard({ result }: { result: URLCheckResult }) {
+function ResultCard({
+  result,
+}: {
+  result: URLCheckResult;
+}) {
   const decision = decisionOf(result);
   const presentation = getDecisionPresentation(decision);
   const risk = getRiskPresentation(result.risk_level);
   const DecisionIcon = presentation.Icon;
-  const score = Math.max(0, Math.min(100, Number(result.risk_score) || 0));
-  const reasons = uniqueReasons(result.reasons);
-  const httpsEnabled =
-    result.https_enabled ?? result.url_analysis?.https_enabled ?? false;
-  const malwareDetected = Boolean(
-    result.malware?.malware_detected ?? result.malware?.detected,
+
+  const score = Math.max(
+    0,
+    Math.min(100, Number(result.risk_score) || 0)
   );
+
+  const reasons = uniqueReasons(result.reasons);
+
+  const httpsEnabled =
+    result.https_enabled ??
+    result.url_analysis?.https_enabled ??
+    false;
+
+  const malwareDetected = Boolean(
+    result.malware?.malware_detected ??
+    result.malware?.detected
+  );
+
   const phishingDetected = Boolean(
-    result.phishing?.phishing_detected ?? result.phishing?.detected,
+    result.phishing?.phishing_detected ??
+    result.phishing?.detected
   );
 
   return (
@@ -247,17 +330,26 @@ function ResultCard({ result }: { result: URLCheckResult }) {
       <div
         className={`overflow-hidden rounded-2xl border ${presentation.border} bg-slate-950/80`}
       >
-        <div className={`flex items-start gap-3 p-4 ${presentation.surface}`}>
-          <div className={`rounded-xl border ${presentation.border} bg-slate-950/50 p-3 ${presentation.color}`}>
+        <div
+          className={`flex items-start gap-3 p-4 ${presentation.surface}`}
+        >
+          <div
+            className={`rounded-xl border ${presentation.border} bg-slate-950/50 p-3 ${presentation.color}`}
+          >
             <DecisionIcon size={25} />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className={`font-semibold ${presentation.color}`}>
+              <p
+                className={`font-semibold ${presentation.color}`}
+              >
                 {presentation.label}
               </p>
-              <span className={`rounded-md border ${presentation.border} px-2 py-0.5 text-[10px] font-bold tracking-wider ${presentation.color}`}>
+
+              <span
+                className={`rounded-md border ${presentation.border} px-2 py-0.5 text-[10px] font-bold tracking-wider ${presentation.color}`}
+              >
                 {presentation.shortLabel}
               </span>
             </div>
@@ -267,18 +359,25 @@ function ResultCard({ result }: { result: URLCheckResult }) {
             </p>
 
             <p className="mt-2 text-xs leading-5 text-slate-400">
-              {result.recommendation || presentation.description}
+              {result.recommendation ||
+                presentation.description}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-px border-t border-slate-800 bg-slate-800 sm:grid-cols-4">
           <div className="bg-slate-950/90 p-3">
-            <p className="text-[11px] text-slate-500">Risk score</p>
+            <p className="text-[11px] text-slate-500">
+              Risk score
+            </p>
+
             <p className={`mt-1 text-xl font-bold ${risk.color}`}>
               {score}
-              <span className="text-xs font-normal text-slate-500"> / 100</span>
+              <span className="text-xs font-normal text-slate-500">
+                {" "}/ 100
+              </span>
             </p>
+
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
               <div
                 className={`h-full rounded-full ${risk.bar}`}
@@ -288,7 +387,10 @@ function ResultCard({ result }: { result: URLCheckResult }) {
           </div>
 
           <div className="bg-slate-950/90 p-3">
-            <p className="text-[11px] text-slate-500">Risk level</p>
+            <p className="text-[11px] text-slate-500">
+              Risk level
+            </p>
+
             <p className={`mt-2 text-sm font-semibold ${risk.color}`}>
               {result.risk_level || "UNKNOWN"}
             </p>
@@ -296,14 +398,27 @@ function ResultCard({ result }: { result: URLCheckResult }) {
 
           <div className="bg-slate-950/90 p-3">
             <p className="text-[11px] text-slate-500">HTTPS</p>
-            <p className={`mt-2 flex items-center gap-1.5 text-sm font-semibold ${httpsEnabled ? "text-emerald-300" : "text-amber-300"}`}>
-              {httpsEnabled ? <LockKeyhole size={14} /> : <AlertTriangle size={14} />}
+
+            <p
+              className={`mt-2 flex items-center gap-1.5 text-sm font-semibold ${
+                httpsEnabled
+                  ? "text-emerald-300"
+                  : "text-amber-300"
+              }`}
+            >
+              {httpsEnabled ? (
+                <LockKeyhole size={14} />
+              ) : (
+                <AlertTriangle size={14} />
+              )}
+
               {httpsEnabled ? "Enabled" : "Not enabled"}
             </p>
           </div>
 
           <div className="bg-slate-950/90 p-3">
             <p className="text-[11px] text-slate-500">SSL/TLS</p>
+
             <p className="mt-2 text-sm font-semibold text-slate-300">
               {result.ssl_status || "Not checked"}
             </p>
@@ -314,46 +429,35 @@ function ResultCard({ result }: { result: URLCheckResult }) {
       <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
         <div className="flex items-center gap-2">
           <Activity size={16} className="text-cyan-300" />
+
           <h4 className="text-sm font-semibold text-white">
             Detection summary
           </h4>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-            {malwareDetected ? (
-              <XCircle size={18} className="shrink-0 text-red-400" />
-            ) : (
-              <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
-            )}
-            <div>
-              <p className="text-xs font-medium text-slate-200">Malware</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {malwareDetected ? "Detection reported" : "No local list match"}
-              </p>
-            </div>
-          </div>
+          <DetectionItem
+            title="Malware"
+            detected={malwareDetected}
+            positiveText="Detection reported"
+            negativeText="No local list match"
+          />
 
-          <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-            {phishingDetected ? (
-              <XCircle size={18} className="shrink-0 text-red-400" />
-            ) : (
-              <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
-            )}
-            <div>
-              <p className="text-xs font-medium text-slate-200">Phishing</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {phishingDetected ? "Detection reported" : "No local rule triggered"}
-              </p>
-            </div>
-          </div>
+          <DetectionItem
+            title="Phishing"
+            detected={phishingDetected}
+            positiveText="Detection reported"
+            negativeText="No local rule triggered"
+          />
 
           <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
             <Globe size={18} className="shrink-0 text-cyan-300" />
+
             <div>
               <p className="text-xs font-medium text-slate-200">
                 Domain reputation
               </p>
+
               <p className="mt-0.5 text-xs text-slate-500">
                 {result.domain_reputation || "UNKNOWN"}
               </p>
@@ -361,17 +465,37 @@ function ResultCard({ result }: { result: URLCheckResult }) {
           </div>
 
           <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-            <Fingerprint size={18} className="shrink-0 text-cyan-300" />
+            <Fingerprint
+              size={18}
+              className="shrink-0 text-cyan-300"
+            />
+
             <div>
               <p className="text-xs font-medium text-slate-200">
                 Analysis method
               </p>
+
               <p className="mt-0.5 text-xs text-slate-500">
                 {result.analysis_method || "Local heuristics"}
               </p>
             </div>
           </div>
         </div>
+
+        {result.age_decision && (
+          <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <p className="text-xs font-medium text-slate-200">
+              Age policy result
+            </p>
+
+            <p className="mt-1 text-sm text-slate-300">
+              {result.age_decision}
+              {typeof result.required_age === "number"
+                ? ` · Required age: ${result.required_age}+`
+                : ""}
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 border-t border-slate-800 pt-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -381,7 +505,10 @@ function ResultCard({ result }: { result: URLCheckResult }) {
           {reasons.length > 0 ? (
             <ul className="mt-3 space-y-2">
               {reasons.map((reason, index) => (
-                <li key={`${index}-${reason}`} className="flex gap-2 text-sm leading-5 text-slate-300">
+                <li
+                  key={`${index}-${reason}`}
+                  className="flex gap-2 text-sm leading-5 text-slate-300"
+                >
                   <span className="mt-0.5 text-cyan-400">•</span>
                   <span>{reason}</span>
                 </li>
@@ -396,16 +523,56 @@ function ResultCard({ result }: { result: URLCheckResult }) {
 
         <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
           <Info size={15} className="mt-0.5 shrink-0" />
-          HTTPS encrypts the connection but does not establish that a website
-          is trustworthy. SSL/TLS verification and external reputation may not
-          be available in this analysis.
+
+          HTTPS encrypts the connection but does not establish
+          that a website is trustworthy. Detection results depend
+          on the checks configured on your backend.
         </p>
       </div>
     </div>
   );
 }
 
-function AssistantMessage({ message }: { message: Message }) {
+function DetectionItem({
+  title,
+  detected,
+  positiveText,
+  negativeText,
+}: {
+  title: string;
+  detected: boolean;
+  positiveText: string;
+  negativeText: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+      {detected ? (
+        <XCircle size={18} className="shrink-0 text-red-400" />
+      ) : (
+        <CheckCircle2
+          size={18}
+          className="shrink-0 text-emerald-400"
+        />
+      )}
+
+      <div>
+        <p className="text-xs font-medium text-slate-200">
+          {title}
+        </p>
+
+        <p className="mt-0.5 text-xs text-slate-500">
+          {detected ? positiveText : negativeText}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AssistantMessage({
+  message,
+}: {
+  message: Message;
+}) {
   return (
     <div className="flex items-start gap-3">
       <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
@@ -414,7 +581,10 @@ function AssistantMessage({ message }: { message: Message }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-white">IDPS Copilot</span>
+          <span className="text-sm font-semibold text-white">
+            IDPS Copilot
+          </span>
+
           <span className="text-[10px] text-slate-600">
             {formatTime(message.timestamp)}
           </span>
@@ -424,13 +594,19 @@ function AssistantMessage({ message }: { message: Message }) {
           {message.text}
         </div>
 
-        {message.result && <ResultCard result={message.result} />}
+        {message.result && (
+          <ResultCard result={message.result} />
+        )}
       </div>
     </div>
   );
 }
 
 export default function AIAssistant() {
+  const { user } = useAuth();
+
+  const registeredAge = calculateAge(user?.date_of_birth);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -438,16 +614,16 @@ export default function AIAssistant() {
       text:
         "Welcome to IDPS Copilot.\n\n" +
         "I can run your configured URL security checks and explain their results. Enter a website below, or choose a quick action to get started.\n\n" +
-        "Note: This version uses your URL-check API and rule-based explanations. A generative AI model and external threat-intelligence service are not connected.",
+        "This version uses your URL-check API and rule-based explanations. A generative AI model and external threat-intelligence service are not connected.",
       timestamp: new Date().toISOString(),
     },
   ]);
 
   const [input, setInput] = useState("");
-  const [age, setAge] = useState("18");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showScrollButton, setShowScrollButton] =
+    useState(false);
 
   const conversationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -470,12 +646,16 @@ export default function AIAssistant() {
         timestamp: new Date().toISOString(),
       },
     ]);
+
     setError("");
     setInput("");
     inputRef.current?.focus();
   }
 
-  function addAssistantMessage(text: string, result?: URLCheckResult) {
+  function addAssistantMessage(
+    text: string,
+    result?: URLCheckResult
+  ) {
     setMessages((current) => [
       ...current,
       {
@@ -490,6 +670,18 @@ export default function AIAssistant() {
 
   async function analyzeURL(rawURL: string) {
     const url = normalizeURLInput(rawURL);
+
+    if (!user) {
+      setError("Please log in before analyzing a website.");
+      return;
+    }
+
+    if (registeredAge === null) {
+      setError(
+        "Your registered date of birth is missing or invalid. Update your account DOB and sign in again before checking websites."
+      );
+      return;
+    }
 
     setMessages((current) => [
       ...current,
@@ -506,10 +698,12 @@ export default function AIAssistant() {
     setError("");
 
     try {
-      const response = await api.post<URLCheckResult>("/api/url/check", {
-        url,
-        age: Number(age),
-      });
+      // The backend must derive the age from the authenticated user's DOB.
+      // Do not send a client-selected age.
+      const response = await api.post<URLCheckResult>(
+        "/api/url/check",
+        { url }
+      );
 
       const result = response.data;
       const decision = decisionOf(result);
@@ -519,8 +713,8 @@ export default function AIAssistant() {
         `Analysis complete for ${result.domain || result.url}.\n\n` +
           `${presentation.label}. Risk score: ${result.risk_score}/100, classified as ${result.risk_level}.\n\n` +
           `${result.recommendation || presentation.description}\n\n` +
-          `Review the detailed detection summary below. These results reflect your configured checks and do not guarantee that a website is safe.`,
-        result,
+          "Review the detailed detection summary below. These results reflect your configured checks and do not guarantee that a website is safe.",
+        result
       );
     } catch (err: unknown) {
       let errorText =
@@ -528,17 +722,28 @@ export default function AIAssistant() {
 
       if (typeof err === "object" && err !== null && "response" in err) {
         const response = (
-          err as { response?: { data?: { detail?: string } } }
+          err as {
+            response?: {
+              status?: number;
+              data?: { detail?: string };
+            };
+          }
         ).response;
 
         if (response?.data?.detail) {
-          errorText = response.data.detail;
+          errorText =
+            typeof response.data.detail === "string"
+              ? response.data.detail
+              : JSON.stringify(response.data.detail);
+        } else if (response?.status === 401) {
+          errorText = "Your session has expired. Please log in again.";
         }
       }
 
       setError(errorText);
+
       addAssistantMessage(
-        "I could not complete the URL analysis. Check the error message and try again after the backend is available.",
+        "I could not complete the URL analysis. Review the error message and try again after correcting the issue."
       );
     } finally {
       setLoading(false);
@@ -570,12 +775,17 @@ export default function AIAssistant() {
     setInput("");
 
     const lower = value.toLowerCase();
+
     let reply =
       "This assistant currently explains URL analysis results from the configured IDPS checks. To investigate a website, enter its URL. I cannot perform a live web search or claim to have verified a site's reputation.";
 
-    if (lower.includes("https") || lower.includes("ssl") || lower.includes("tls")) {
+    if (
+      lower.includes("https") ||
+      lower.includes("ssl") ||
+      lower.includes("tls")
+    ) {
       reply =
-        "HTTPS encrypts data between your browser and the website, helping protect it from interception in transit. However, phishing and malware websites can also use HTTPS. A secure connection does not prove that the site operator is trustworthy. Your current SSL/TLS status is marked as not checked unless the backend performs a separate certificate verification.";
+        "HTTPS encrypts data between your browser and the website, helping protect it from interception in transit. However, phishing and malware websites can also use HTTPS. A secure connection does not prove that the site operator is trustworthy. SSL/TLS verification may not be available unless your backend performs a separate certificate check.";
     } else if (
       lower.includes("phishing") ||
       lower.includes("fake website")
@@ -587,7 +797,7 @@ export default function AIAssistant() {
       lower.includes("virus")
     ) {
       reply =
-        "Your current malware detector checks the submitted URL against its configured local detection rules. A result of 'no local list match' means those configured checks did not match; it does not mean the website's files or downloads were fully scanned.";
+        "Your malware detector checks the submitted URL against its configured detection rules. A result of 'no local list match' means those configured checks did not match; it does not mean website files or downloads were fully scanned.";
     } else if (
       lower.includes("risk score") ||
       lower.includes("risk level") ||
@@ -595,6 +805,15 @@ export default function AIAssistant() {
     ) {
       reply =
         "Your risk engine combines URL-structure findings, configured malware and phishing detections, domain reputation, and applicable policy rules. ALLOW means no configured blocking condition was found; WARN recommends caution; BLOCK means a detection or policy requires blocking. A LOW score is not a guarantee of safety.";
+    } else if (
+      lower.includes("my age") ||
+      lower.includes("date of birth") ||
+      lower.includes("dob")
+    ) {
+      reply =
+        registeredAge === null
+          ? "Your registered date of birth is not available or is invalid. Update your account details and sign in again."
+          : `Your age calculated from your registered date of birth is ${registeredAge}. The backend must use the DOB stored on your account to enforce age restrictions.`;
     }
 
     window.setTimeout(() => {
@@ -642,9 +861,13 @@ export default function AIAssistant() {
             <Wifi size={15} className="text-emerald-400" />
             Backend integration
           </div>
-          <p className="mt-2 text-sm font-semibold text-white">URL Check API</p>
+
+          <p className="mt-2 text-sm font-semibold text-white">
+            URL Check API
+          </p>
+
           <p className="mt-1 text-[11px] text-slate-500">
-            Connection verified per request
+            Requests use your authenticated session
           </p>
         </div>
 
@@ -653,9 +876,11 @@ export default function AIAssistant() {
             <Shield size={15} className="text-cyan-300" />
             Detection engine
           </div>
+
           <p className="mt-2 text-sm font-semibold text-white">
             Rule-based analysis
           </p>
+
           <p className="mt-1 text-[11px] text-slate-500">
             Local configured checks
           </p>
@@ -666,9 +891,11 @@ export default function AIAssistant() {
             <Clock3 size={15} className="text-violet-300" />
             Latest assessment
           </div>
+
           <p className="mt-2 truncate text-sm font-semibold text-white">
             {lastResult?.domain || "No analysis yet"}
           </p>
+
           <p className="mt-1 text-[11px] text-slate-500">
             {lastResult
               ? `${lastResult.risk_level} · ${lastResult.risk_score}/100`
@@ -690,6 +917,7 @@ export default function AIAssistant() {
             <h2 className="text-sm font-semibold text-white">
               IDPS Security Assistant
             </h2>
+
             <p className="mt-1 text-xs text-slate-500">
               URL analysis and security explanations
             </p>
@@ -698,7 +926,9 @@ export default function AIAssistant() {
           <div className="ml-auto flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-400">
             <span
               className={`h-2 w-2 rounded-full ${
-                loading ? "animate-pulse bg-amber-400" : "bg-emerald-400"
+                loading
+                  ? "animate-pulse bg-amber-400"
+                  : "bg-emerald-400"
               }`}
             />
             {loading ? "Analyzing" : "Ready"}
@@ -709,35 +939,44 @@ export default function AIAssistant() {
           ref={conversationRef}
           onScroll={(event) => {
             const element = event.currentTarget;
+
             setShowScrollButton(
               element.scrollHeight -
                 element.scrollTop -
                 element.clientHeight >
-                100,
+                100
             );
           }}
-         className="relative min-h-[400px] flex-1 space-y-8 overflow-y-auto p-5 sm:p-8 lg:p-10"
+          className="relative min-h-[400px] flex-1 space-y-8 overflow-y-auto p-5 sm:p-8 lg:p-10"
         >
           {messages.map((message) =>
             message.role === "assistant" ? (
-              <AssistantMessage key={message.id} message={message} />
+              <AssistantMessage
+                key={message.id}
+                message={message}
+              />
             ) : (
-              <div key={message.id} className="flex justify-end gap-3">
+              <div
+                key={message.id}
+                className="flex justify-end gap-3"
+              >
                 <div className="max-w-[90%] sm:max-w-[75%]">
                   <div className="mb-1 flex justify-end">
                     <span className="text-[10px] text-slate-600">
                       You · {formatTime(message.timestamp)}
                     </span>
                   </div>
+
                   <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm leading-6 text-cyan-50">
                     {message.text}
                   </div>
                 </div>
+
                 <div className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-300">
                   <MessageSquare size={16} />
                 </div>
               </div>
-            ),
+            )
           )}
 
           {loading && (
@@ -745,6 +984,7 @@ export default function AIAssistant() {
               <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
                 <Bot size={19} />
               </div>
+
               <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm text-slate-300">
                   <span className="flex gap-1">
@@ -754,6 +994,7 @@ export default function AIAssistant() {
                   </span>
                   Running configured security checks...
                 </div>
+
                 <p className="mt-1 text-xs text-slate-500">
                   This may take a moment.
                 </p>
@@ -789,14 +1030,17 @@ export default function AIAssistant() {
                           size={19}
                           className="text-cyan-300"
                         />
+
                         <ArrowRight
                           size={15}
                           className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-300"
                         />
                       </div>
+
                       <p className="mt-4 text-sm font-semibold text-white">
                         {action.title}
                       </p>
+
                       <p className="mt-1 text-xs leading-5 text-slate-500">
                         {action.description}
                       </p>
@@ -843,27 +1087,24 @@ export default function AIAssistant() {
           className="border-t border-slate-800 bg-slate-950/60 p-4 sm:p-5"
         >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <label
-              htmlFor="analysisAge"
-              className="flex items-center gap-2 text-xs text-slate-400"
-            >
+            <div className="flex items-center gap-2 text-xs text-slate-400">
               <ShieldCheck size={15} className="text-cyan-300" />
-              Age for policy checks
-            </label>
+              Age policy uses your registered DOB
+            </div>
 
-            <select
-              id="analysisAge"
-              value={age}
-              onChange={(event) => setAge(event.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
-            >
-              <option value="13">13 years</option>
-              <option value="16">16 years</option>
-              <option value="18">18 years</option>
-              <option value="21">21 years</option>
-              <option value="25">25 years</option>
-            </select>
+            <span className="text-xs text-slate-500">
+              {registeredAge === null
+                ? "DOB unavailable"
+                : `Registered age: ${registeredAge}`}
+            </span>
           </div>
+
+          {registeredAge === null && (
+            <p className="mb-3 text-xs leading-5 text-amber-300">
+              URL checks require a valid DOB on your account. Update your
+              account details and sign in again if your DOB is missing.
+            </p>
+          )}
 
           <div className="flex items-end gap-2 rounded-2xl border border-slate-700 bg-slate-900 p-2 transition focus-within:border-cyan-500/60 focus-within:ring-2 focus-within:ring-cyan-500/10">
             <input
@@ -892,14 +1133,15 @@ export default function AIAssistant() {
               <LockKeyhole size={13} />
               Avoid submitting URLs containing private tokens or credentials.
             </span>
+
             <span>Rule-based mode</span>
           </div>
         </form>
       </section>
 
       <p className="text-center text-[11px] leading-5 text-slate-600">
-        IDPS Shield · Results depend on configured detection rules. No scan can
-        guarantee that a website is safe.
+        IDPS Shield · Results depend on configured detection rules.
+        No scan can guarantee that a website is safe.
       </p>
     </div>
   );

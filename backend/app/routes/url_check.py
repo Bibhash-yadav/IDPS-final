@@ -1,6 +1,7 @@
 
 import ipaddress
 import logging
+from datetime import date
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +24,7 @@ from app.detectors import (
 from app.services.risk_engine import (
     calculate_risk,
     apply_domain_rules,
+    is_adult_content_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,8 +36,9 @@ router = APIRouter(
 
 
 class URLCheckRequest(BaseModel):
+    # Age is deliberately not accepted as an authoritative field.
+    # Extra fields such as "age" from older frontends are ignored.
     url: str = Field(min_length=1, max_length=2048)
-    age: int = Field(ge=1, le=120)
 
     @field_validator("url")
     @classmethod
@@ -48,6 +51,27 @@ class URLCheckRequest(BaseModel):
         return value
 
 
+def calculate_registered_age(date_of_birth: date | None) -> int | None:
+    """Calculate age using the date of birth saved in the database."""
+    if date_of_birth is None:
+        return None
+
+    today = date.today()
+
+    if date_of_birth > today:
+        return None
+
+    age = today.year - date_of_birth.year
+
+    if (today.month, today.day) < (
+        date_of_birth.month,
+        date_of_birth.day,
+    ):
+        age -= 1
+
+    return age if 0 <= age <= 120 else None
+
+
 @router.post("/check")
 def check_url(
     data: URLCheckRequest,
@@ -55,7 +79,22 @@ def check_url(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        # 1. Normalize and validate the URL.
+        # 1. Derive age from the authenticated database user.
+        # Never trust an age supplied by the browser.
+        account_age = calculate_registered_age(
+            current_user.date_of_birth
+        )
+
+        if account_age is None:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Your registered date of birth is missing or invalid. "
+                    "Please update your account before checking websites."
+                ),
+            )
+
+        # 2. Normalize and validate the submitted URL.
         normalized_url = normalize_url(data.url)
 
         if not isinstance(normalized_url, str) or not normalized_url.strip():
@@ -74,13 +113,12 @@ def check_url(
 
         hostname = hostname.lower().rstrip(".")
 
-        # Accessing parsed.port can raise ValueError for an invalid port.
         try:
             _ = parsed.port
         except ValueError as exc:
             raise ValueError("URL contains an invalid port") from exc
 
-        # 2. Basic protection against localhost and private IP targets.
+        # Reject local hosts and non-public IP addresses.
         if hostname in {"localhost", "localhost.localdomain"}:
             raise ValueError("Localhost URLs are not allowed")
 
@@ -94,31 +132,26 @@ def check_url(
                 "Private and non-public IP addresses are not allowed"
             )
 
-        # Note: hostname validation alone does not prevent DNS rebinding.
-        # Do not fetch the submitted URL directly without additional
-        # network-level SSRF protections.
+        # Do not fetch submitted URLs without appropriate SSRF protection.
+        # This endpoint performs analysis using the configured detectors.
 
-        # 3. Run local URL, malware, and phishing detectors.
+        # 3. Run the configured detectors.
         url_result = analyze_url(normalized_url)
         malware_result = detect_malware(normalized_url)
         phishing_result = detect_phishing(normalized_url)
 
         if not isinstance(url_result, dict):
-            raise RuntimeError(
-                "analyze_url() must return a dictionary"
-            )
+            raise RuntimeError("analyze_url() must return a dictionary")
 
         if not isinstance(malware_result, dict):
-            raise RuntimeError(
-                "detect_malware() must return a dictionary"
-            )
+            raise RuntimeError("detect_malware() must return a dictionary")
 
         if not isinstance(phishing_result, dict):
-            raise RuntimeError(
-                "detect_phishing() must return a dictionary"
-            )
+            raise RuntimeError("detect_phishing() must return a dictionary")
 
-        # Ensure the domain saved in the event is a valid string.
+        # Make the original URL available to the risk engine.
+        url_result["url"] = normalized_url
+
         detected_domain = url_result.get("domain") or hostname
 
         if not isinstance(detected_domain, str):
@@ -126,8 +159,8 @@ def check_url(
                 "URL detector returned an invalid domain"
             )
 
-        # No external reputation service is configured.
-        reputation = "UNKNOWN"
+        # This is a rule-based indicator, not a comprehensive content classifier.
+        adult_match = is_adult_content_url(normalized_url)
 
         # 4. Load this user's protection settings.
         settings = (
@@ -139,33 +172,27 @@ def check_url(
         )
 
         safe_browsing_enabled = (
-            settings.safe_browsing
-            if settings is not None
-            else True
+            settings.safe_browsing if settings is not None else True
         )
 
         strict_mode_enabled = (
-            settings.strict_mode
-            if settings is not None
-            else True
+            settings.strict_mode if settings is not None else True
         )
 
         age_restriction_enabled = (
-            settings.age_restriction
-            if settings is not None
-            else False
+            settings.age_restriction if settings is not None else True
         )
 
-        # 5. Calculate risk using the configured local detectors.
+        # 5. Calculate risk using the registered age.
         result = calculate_risk(
             url_result=url_result,
             malware_result=malware_result,
             phishing_result=phishing_result,
-            domain_reputation=reputation,
+            domain_reputation="UNKNOWN",
             strict_safe_browsing=(
                 safe_browsing_enabled and strict_mode_enabled
             ),
-            user_age=data.age,
+            user_age=account_age,
         )
 
         if not isinstance(result, dict):
@@ -190,16 +217,51 @@ def check_url(
                 + ", ".join(sorted(missing_keys))
             )
 
+        result["adult_content_detected"] = adult_match
+        result["user_age"] = account_age
+
+        # Apply the age rule only when age protection is enabled.
+        if adult_match and age_restriction_enabled:
+            result["age_restricted"] = True
+            result["required_age"] = 18
+            result["age_decision"] = (
+                "BLOCK" if account_age < 18 else "ALLOW"
+            )
+
+            if account_age < 18:
+                result["decision"] = "BLOCK"
+                result["risk_score"] = max(
+                    int(result.get("risk_score", 0)),
+                    100,
+                )
+                result["risk_level"] = "CRITICAL"
+
+                reasons = list(result.get("reasons") or [])
+                reasons.extend([
+                    "The URL matches a configured adult-content rule.",
+                    "Access is blocked because the registered account age is below 18.",
+                ])
+                result["reasons"] = list(dict.fromkeys(reasons))
+
+                detection_status = result.get("detection_status") or {}
+                if isinstance(detection_status, dict):
+                    result["detection_status"] = {
+                        **detection_status,
+                        "age_restriction": "BLOCK_UNDER_18",
+                    }
+        else:
+            result["age_restricted"] = False
+            result["required_age"] = None
+            result["age_decision"] = "NOT_ESTABLISHED"
+
         result["safe_browsing_enabled"] = safe_browsing_enabled
         result["strict_mode_enabled"] = strict_mode_enabled
         result["age_restriction_enabled"] = age_restriction_enabled
 
-        # 6. Load only the current user's domain rules.
+        # 6. Apply only this user's saved domain rules.
         user_rules = (
             db.query(SecurityRule)
-            .filter(
-                SecurityRule.user_id == current_user.id
-            )
+            .filter(SecurityRule.user_id == current_user.id)
             .all()
         )
 
@@ -214,21 +276,39 @@ def check_url(
                 "Domain rule engine must return a dictionary"
             )
 
-        # No website age-classification service is configured.
-        # Do not claim that a real age restriction was detected.
-        result["age_restricted"] = False
-        result["required_age"] = None
-        result["user_age"] = data.age
-        result["age_decision"] = "NOT_ESTABLISHED"
+        # Reassert the age block after custom domain rules.
+        # A user-created ALLOW rule must not override it.
+        if (
+            adult_match
+            and age_restriction_enabled
+            and account_age < 18
+        ):
+            result["decision"] = "BLOCK"
+            result["risk_level"] = "CRITICAL"
+            result["risk_score"] = max(
+                int(result.get("risk_score", 0)),
+                100,
+            )
+            result["adult_content_detected"] = True
+            result["age_restricted"] = True
+            result["required_age"] = 18
+            result["user_age"] = account_age
+            result["age_decision"] = "BLOCK"
 
-        # 7. Classify the event using the final decision.
-        if result["malware_detected"]:
+        # 7. Classify the security event.
+        if result.get("malware_detected"):
             event_type = "MALWARE_DETECTED"
-        elif result["phishing_detected"]:
+        elif result.get("phishing_detected"):
             event_type = "PHISHING_DETECTED"
+        elif (
+            result.get("adult_content_detected")
+            and age_restriction_enabled
+            and account_age < 18
+        ):
+            event_type = "AGE_RESTRICTED_CONTENT_BLOCKED"
         elif result.get("blocklisted", False):
             event_type = "DOMAIN_BLOCKLISTED"
-        elif result["decision"] != "ALLOW":
+        elif str(result.get("decision", "")).upper() != "ALLOW":
             event_type = "SUSPICIOUS_URL"
         else:
             event_type = "URL_CHECKED"
@@ -239,18 +319,17 @@ def check_url(
             url=normalized_url,
             domain=detected_domain,
             event_type=event_type,
-            source="URL_CHECK",
             risk_score=int(result["risk_score"]),
             risk_level=str(result["risk_level"]),
-            decision=str(result["decision"]),
-            reasons=result["reasons"],
+            decision=str(result["decision"]).upper(),
+            reasons=result.get("reasons", []),
         )
 
         db.add(event)
         db.commit()
         db.refresh(event)
 
-        # 9. Return the result to the frontend.
+        # 9. Build the response for the frontend.
         decision = str(result["decision"]).upper()
 
         if decision == "BLOCK":
@@ -259,8 +338,7 @@ def check_url(
             recommendation = "Proceed with caution."
         else:
             recommendation = (
-                "No blocking indicators were found "
-                "by the configured checks."
+                "No blocking indicators were found by the configured checks."
             )
 
         return {
@@ -275,21 +353,31 @@ def check_url(
             "malware": malware_result,
             "phishing": phishing_result,
             "url_analysis": url_result,
-            "domain_reputation": reputation,
+            "domain_reputation": "UNKNOWN",
             "safe_browsing_enabled": safe_browsing_enabled,
             "strict_mode_enabled": strict_mode_enabled,
             "age_restriction_enabled": age_restriction_enabled,
-            "age_restricted": False,
-            "required_age": None,
-            "user_age": data.age,
-            "age_decision": "NOT_ESTABLISHED",
-            "risk_score": result["risk_score"],
+            "adult_content_detected": bool(
+                result.get("adult_content_detected", False)
+            ),
+            "age_restricted": bool(
+                result.get("age_restricted", False)
+            ),
+            "required_age": result.get("required_age"),
+            "user_age": account_age,
+            "age_decision": result.get(
+                "age_decision", "NOT_ESTABLISHED"
+            ),
+            "risk_score": int(result["risk_score"]),
             "risk_level": result["risk_level"],
             "decision": decision,
             "blocklisted": result.get("blocklisted", False),
-            "reasons": result["reasons"],
+            "reasons": result.get("reasons", []),
             "recommendation": recommendation,
-            "analysis_method": "local_heuristics",
+            "analysis_method": result.get(
+                "analysis_method", "local_heuristics"
+            ),
+            "test_mode": result.get("test_mode", False),
         }
 
     except HTTPException:
@@ -305,9 +393,7 @@ def check_url(
 
     except SQLAlchemyError as exc:
         db.rollback()
-        logger.exception(
-            "Database error while saving URL analysis"
-        )
+        logger.exception("Database error while saving URL analysis")
         raise HTTPException(
             status_code=500,
             detail="Database error while saving URL analysis.",
