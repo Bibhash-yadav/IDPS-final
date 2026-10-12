@@ -26,6 +26,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://idps-frontend.vercel.app",
+        "https://idps-fp.vercel.app",
         "https://idps-shield.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
