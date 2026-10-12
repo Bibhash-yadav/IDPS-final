@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   ShieldCheck,
   ShieldAlert,
-  UserRound,
   Save,
   Loader2,
   CheckCircle2,
@@ -18,15 +17,11 @@ import DownloadExtensionButton from "../components/DownloadExtensionButton";
 interface ProtectionSettings {
   safe_browsing: boolean;
   strict_mode: boolean;
-  age_restriction: boolean;
-  minimum_age: number;
 }
 
 const DEFAULT_SETTINGS: ProtectionSettings = {
   safe_browsing: true,
   strict_mode: true,
-  age_restriction: false,
-  minimum_age: 18,
 };
 
 export default function Settings() {
@@ -46,7 +41,7 @@ export default function Settings() {
       setError("");
 
       try {
-        const response = await api.get<ProtectionSettings>(
+        const response = await api.get<Partial<ProtectionSettings>>(
           "/api/protection/settings"
         );
 
@@ -91,21 +86,12 @@ export default function Settings() {
   }
 
   async function saveSettings() {
-    if (
-      !Number.isInteger(settings.minimum_age) ||
-      settings.minimum_age < 1 ||
-      settings.minimum_age > 120
-    ) {
-      setError("Minimum age must be an integer between 1 and 120.");
-      return;
-    }
-
     setSaving(true);
     setError("");
     setSuccess("");
 
     try {
-      const response = await api.put<ProtectionSettings>(
+      const response = await api.put<Partial<ProtectionSettings>>(
         "/api/protection/settings",
         settings
       );
@@ -151,7 +137,9 @@ export default function Settings() {
           </div>
 
           <div>
-            <h1 className="text-2xl font-bold">Security Settings</h1>
+            <h1 className="text-2xl font-bold">
+              Security Settings
+            </h1>
             <p className="mt-1 text-sm text-slate-400">
               Manage browsing protection and your browser extension.
             </p>
@@ -181,7 +169,7 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Browser extension download */}
+      {/* Browser extension */}
       <section className="rounded-2xl border border-cyan-500/20 bg-slate-900 p-5 shadow-lg sm:p-6">
         <div className="mb-5 flex items-center gap-3">
           <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-cyan-300">
@@ -258,66 +246,7 @@ export default function Settings() {
               updateSetting("strict_mode", value)
             }
           />
-
-          <SettingToggle
-            title="Age Restriction"
-            description="Enable the age-policy preference for supported website checks."
-            checked={settings.age_restriction}
-            onChange={(value) =>
-              updateSetting("age_restriction", value)
-            }
-          />
         </div>
-      </section>
-
-      {/* Age policy */}
-      <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-sm sm:p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <UserRound className="text-cyan-400" size={22} />
-
-          <div>
-            <h2 className="font-semibold">Age Policy</h2>
-            <p className="text-sm text-slate-400">
-              Set your preferred minimum age for supported policy checks.
-            </p>
-          </div>
-        </div>
-
-        <label
-          htmlFor="minimum-age"
-          className="mb-2 block text-sm font-medium text-slate-300"
-        >
-          Minimum age
-        </label>
-
-        <div className="flex max-w-xs items-center gap-3">
-          <input
-            id="minimum-age"
-            type="number"
-            min={1}
-            max={120}
-            step={1}
-            value={settings.minimum_age}
-            onChange={(event) => {
-              const value = Number(event.target.value);
-
-              updateSetting(
-                "minimum_age",
-                Number.isFinite(value) ? value : 18
-              );
-            }}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-white outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-          />
-
-          <span className="text-sm text-slate-400">years</span>
-        </div>
-
-        {!settings.age_restriction && (
-          <p className="mt-3 text-xs leading-5 text-slate-500">
-            Age Restriction is currently disabled. Saving a minimum age
-            does not establish a website's actual age requirement.
-          </p>
-        )}
       </section>
 
       {/* Save and reset */}
@@ -325,12 +254,7 @@ export default function Settings() {
         <button
           type="button"
           onClick={saveSettings}
-          disabled={
-            saving ||
-            settings.minimum_age < 1 ||
-            settings.minimum_age > 120 ||
-            !Number.isInteger(settings.minimum_age)
-          }
+          disabled={saving}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-5 py-3 font-medium text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? (
