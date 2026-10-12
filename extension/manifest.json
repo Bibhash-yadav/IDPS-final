@@ -4,6 +4,7 @@
   "name": "IDPS Shield - Cyber Defense",
   "version": "1.2.0",
   "description": "Analyze website URLs, detect potential threats, and help protect browsing using the IDPS Shield security backend.",
+
   "permissions": [
     "storage",
     "tabs",
@@ -11,19 +12,37 @@
     "notifications",
     "declarativeNetRequest"
   ],
+
   "host_permissions": [
+    "https://idps-backend-485j.onrender.com/*",
     "http://127.0.0.1:8000/*",
     "http://localhost:8000/*",
     "http://*/*",
     "https://*/*"
   ],
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
   "background": {
     "service_worker": "background.js"
   },
+
   "action": {
     "default_title": "IDPS Shield - Browser Protection",
-    "default_popup": "popup/popup.html"
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
+
   "content_scripts": [
     {
       "matches": [
@@ -36,5 +55,6 @@
       "run_at": "document_idle"
     }
   ],
+
   "options_page": "options/options.html"
 }
