@@ -1,7 +1,7 @@
 
 "use strict";
 
-const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_URL = "https://idps-backend-485j.onrender.com";
 const CHECK_COOLDOWN_MS = 10_000;
 const MAX_RECENT_CHECKS = 200;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -39,11 +39,14 @@ function isLocalDevelopmentUrl(value) {
   }
 }
 
+/**
+ * Age is intentionally excluded from extension settings.
+ * Age-based rules should use the authenticated user's account data.
+ */
 async function getSettings() {
   const settings = await chrome.storage.local.get({
     apiUrl: DEFAULT_API_URL,
     token: "",
-    age: 18,
     protectionEnabled: true,
   });
 
@@ -51,14 +54,13 @@ async function getSettings() {
     ...settings,
     apiUrl: normalizeApiUrl(settings.apiUrl),
     token: String(settings.token || "").trim(),
-    age: Number(settings.age) || 18,
     protectionEnabled: Boolean(settings.protectionEnabled),
   };
 }
 
-/*
- * These overrides apply only to the exact official demonstration URLs.
- * They do not classify arbitrary websites as malicious.
+/**
+ * Demonstration URLs only. These results do not indicate live threat
+ * intelligence or prove that any other URL is malicious.
  */
 function getSafeBrowsingTestResult(rawUrl) {
   try {
@@ -96,7 +98,7 @@ function getSafeBrowsingTestResult(rawUrl) {
       };
     }
   } catch {
-    // Invalid URLs are handled by normal URL validation.
+    // Normal URL validation handles invalid URLs.
   }
 
   return null;
@@ -169,9 +171,9 @@ async function apiFetch(path, options = {}) {
   }
 }
 
-/*
- * All normal website decisions come from the authenticated backend.
- * The backend should calculate age from the account's registered DOB.
+/**
+ * The extension does not collect or send a manually selected age.
+ * The backend should resolve the authenticated account and its DOB.
  */
 async function checkUrl(rawUrl) {
   if (!isWebUrl(rawUrl)) {
@@ -198,13 +200,10 @@ async function checkUrl(rawUrl) {
     return testResult;
   }
 
-  // Do not send a manually selected age.
-  // The backend must obtain the age from the authenticated user's DOB.
+  // Do not send age. The backend must use the authenticated user's profile.
   const result = await apiFetch("/api/url/check", {
     method: "POST",
-    body: JSON.stringify({
-      url: rawUrl,
-    }),
+    body: JSON.stringify({ url: rawUrl }),
   });
 
   const decision = String(result.decision || "").toUpperCase();
@@ -305,7 +304,7 @@ async function showSecurityNotification(url, result) {
 async function redirectToBlockedPage(tabId, url, result) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
 
-  // Avoid redirecting a tab that has already navigated elsewhere.
+  // Do not redirect a tab that has already navigated elsewhere.
   if (!tab || tab.url !== url) {
     return;
   }
@@ -326,6 +325,10 @@ async function redirectToBlockedPage(tabId, url, result) {
   });
 }
 
+/**
+ * Navigation checks run after navigation commits. A BLOCK decision
+ * redirects the tab; this does not prevent the first request from loading.
+ */
 async function assessNavigation(tabId, url) {
   if (!isWebUrl(url) || isLocalDevelopmentUrl(url)) {
     return;
@@ -353,7 +356,6 @@ async function assessNavigation(tabId, url) {
       const result = await checkUrl(url);
 
       rememberCheck(key);
-
       await saveTabResult(tabId, url, result);
 
       if (result.decision === "WARN" || result.decision === "BLOCK") {
@@ -365,7 +367,6 @@ async function assessNavigation(tabId, url) {
       }
     } catch (error) {
       console.error("IDPS navigation assessment failed:", error);
-
       await saveTabError(tabId, url, error);
     } finally {
       pendingChecks.delete(key);
@@ -377,11 +378,6 @@ async function assessNavigation(tabId, url) {
   return task;
 }
 
-/*
- * This event runs after navigation has committed.
- * Therefore, blocking occurs by redirecting the tab after the backend
- * returns BLOCK, not by cancelling the initial request before it loads.
- */
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
 
@@ -458,14 +454,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const input = message.settings || {};
-        const age = Number(input.age);
-        const apiUrl = normalizeApiUrl(input.apiUrl);
-
-        // Retained for compatibility with the current settings page.
-        // It is not sent to the backend for security decisions.
-        if (!Number.isInteger(age) || age < 1 || age > 120) {
-          throw new Error("Age must be an integer between 1 and 120.");
-        }
+        const apiUrl = normalizeApiUrl(
+          input.apiUrl || DEFAULT_API_URL
+        );
 
         let parsed;
 
@@ -492,10 +483,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const token = String(input.token || "").trim();
 
+        // Age is intentionally not saved.
         await chrome.storage.local.set({
           apiUrl,
           token,
-          age,
           protectionEnabled: Boolean(input.protectionEnabled),
         });
 
