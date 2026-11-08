@@ -143,7 +143,6 @@ export default function Profile() {
 
   const headingClass = isDark ? "text-white" : "text-slate-900";
   const secondaryClass = isDark ? "text-slate-400" : "text-slate-500";
-  const mutedClass = isDark ? "text-slate-500" : "text-slate-400";
 
   const glassClass = isDark
     ? "border border-white/10 bg-white/[0.055] shadow-[0_12px_40px_rgba(0,0,0,0.18)]"

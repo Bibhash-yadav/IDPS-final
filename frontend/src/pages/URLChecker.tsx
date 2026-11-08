@@ -19,7 +19,6 @@ import {
   Info,
   Activity,
   Server,
-  Clock,
   Cloud,
 } from "lucide-react";
 
