@@ -75,6 +75,65 @@ def _risk_level(score: int) -> str:
     return "LOW"
 
 
+def _normalize_ssl_status(ssl_status: str | None, ssl_valid: bool | None) -> str:
+    """Normalize certificate-check results without treating HTTPS as proof of safety."""
+    status = str(ssl_status or "").strip().upper()
+    if status:
+        return status
+    if ssl_valid is True:
+        return "VALID"
+    if ssl_valid is False:
+        return "INVALID"
+    return "NOT_CHECKED"
+
+
+SSL_BLOCKING_STATUSES = {
+    "HOSTNAME_MISMATCH",
+    "EXPIRED",
+    "NOT_YET_VALID",
+    "INVALID",
+    "TLS_ERROR",
+    "CERTIFICATE_REVOKED",
+}
+
+SSL_WARNING_STATUSES = {
+    "TIMEOUT",
+    "UNAVAILABLE",
+    "ERROR",
+    "NOT_CHECKED",
+    "DNS_ERROR",
+}
+
+
+def _apply_ssl_risk(
+    score: int,
+    reasons: list[str],
+    ssl_status: str,
+) -> tuple[int, bool]:
+    """Add SSL/TLS risk. Returns (score, certificate_problem)."""
+    if ssl_status == "VALID":
+        return score, False
+
+    if ssl_status in SSL_BLOCKING_STATUSES:
+        reasons.append(
+            f"SSL/TLS certificate verification failed: {ssl_status}."
+        )
+        return max(score, 60), True
+
+    if ssl_status in SSL_WARNING_STATUSES:
+        reasons.append(
+            f"SSL/TLS certificate status could not be verified: {ssl_status}."
+        )
+        return max(score, 50), True
+
+    if ssl_status in {"NOT_APPLICABLE", "HTTP_ONLY"}:
+        reasons.append("The URL does not use HTTPS; traffic is not protected by TLS.")
+        return max(score, 30), True
+
+    reasons.append(f"SSL/TLS status is unrecognized: {ssl_status}.")
+    return max(score, 50), True
+
+
 def _get_original_url(*results: dict[str, Any]) -> str:
     """Find the original URL in analyzer result dictionaries."""
     for result in results:
@@ -181,6 +240,10 @@ def _adult_content_block_result(
         "user_age": user_age,
         "age_decision": age_decision,
         "confirmed_threat": False,
+        "ssl_valid": None,
+        "ssl_status": "NOT_CHECKED",
+        "ssl_error": None,
+        "ssl_problem": False,
         "adult_content_detected": True,
         "detection_status": {
             "url_structure": "ADULT_CONTENT_RULE_MATCH",
@@ -216,6 +279,10 @@ def _google_malware_test_result(
         "user_age": user_age,
         "age_decision": "ALLOW",
         "confirmed_threat": True,
+        "ssl_valid": None,
+        "ssl_status": "NOT_CHECKED",
+        "ssl_error": None,
+        "ssl_problem": False,
         "adult_content_detected": False,
         "detection_status": {
             "url_structure": "TEST_CASE",
@@ -242,6 +309,9 @@ def calculate_risk(
     required_age: int | None = None,
     user_age: int | None = None,
     strict_safe_browsing: bool = False,
+    ssl_valid: bool | None = None,
+    ssl_status: str | None = None,
+    ssl_error: str | None = None,
 ) -> dict[str, Any]:
     """
     Calculate risk and enforce adult-content age restrictions.
@@ -276,6 +346,15 @@ def calculate_risk(
 
     score = _safe_score(url_result.get("risk_contribution"))
     reasons: list[str] = []
+
+    normalized_ssl_status = _normalize_ssl_status(ssl_status, ssl_valid)
+    score, ssl_problem = _apply_ssl_risk(
+        score,
+        reasons,
+        normalized_ssl_status,
+    )
+    if ssl_error:
+        reasons.append(f"SSL/TLS verification detail: {str(ssl_error)[:300]}")
 
     # 1. URL structure findings.
     findings = url_result.get("findings", [])
@@ -376,6 +455,12 @@ def calculate_risk(
         strict_safe_browsing
         and score > 0
         and reputation == "UNKNOWN"
+        and (
+            malware_detected
+            or phishing_detected
+            or url_score > 0
+            or ssl_problem
+        )
     ):
         decision = "WARN"
     else:
@@ -407,7 +492,7 @@ def calculate_risk(
         ),
         "domain_reputation": reputation,
         "https": "ENABLED" if https_enabled else "NOT_ENABLED",
-        "ssl_tls": "NOT_CHECKED",
+        "ssl_tls": normalized_ssl_status,
         "age_restriction": (
             "BLOCK"
             if age_block
@@ -441,6 +526,10 @@ def calculate_risk(
         "user_age": user_age,
         "age_decision": "BLOCK" if age_block else "ALLOW",
         "confirmed_threat": confirmed_threat,
+        "ssl_valid": ssl_valid,
+        "ssl_status": normalized_ssl_status,
+        "ssl_error": str(ssl_error)[:300] if ssl_error else None,
+        "ssl_problem": ssl_problem,
         "adult_content_detected": False,
         "detection_status": detection_status,
         "analysis_method": "rule_based_risk_engine",
@@ -514,3 +603,4 @@ def apply_domain_rules(
         updated_result.setdefault("blocklisted", False)
 
     return updated_result
+    

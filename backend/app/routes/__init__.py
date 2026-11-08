@@ -9,5 +9,6 @@ __all__ = [
     "protection",
     "protection_settings",
     "extension_download",
+    "cloudflare",
 
 ]

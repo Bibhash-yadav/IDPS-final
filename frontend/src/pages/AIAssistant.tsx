@@ -1,8 +1,8 @@
-
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ArrowDown,
   ArrowRight,
   Bot,
   CheckCircle2,
@@ -81,7 +81,7 @@ type SecurityAnswer = {
 const QUICK_ACTIONS = [
   {
     title: "Analyze a website",
-    description: "Check a URL for configured risk indicators",
+    description: "Check a URL using your configured security services",
     prompt: "https://example.com",
     icon: ScanSearch,
   },
@@ -119,22 +119,15 @@ const QUICK_ACTIONS = [
 
 function normalizeURLInput(value: string) {
   const trimmed = value.trim();
-
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  return `https://${trimmed}`;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function isURLInput(value: string) {
   const trimmed = value.trim();
-
   if (!trimmed || /\s/.test(trimmed)) return false;
 
   try {
     const parsed = new URL(normalizeURLInput(trimmed));
-
     return (
       ["http:", "https:"].includes(parsed.protocol) &&
       (parsed.hostname.includes(".") ||
@@ -154,13 +147,11 @@ function formatTime(value: string) {
   });
 }
 
-function decisionOf(result: URLCheckResult) {
+function decisionOf(result: URLCheckResult): "ALLOW" | "BLOCK" | "WARN" | "UNKNOWN" {
   const decision = (result.decision || "").toUpperCase();
-
   if (["ALLOW", "ALLOWED"].includes(decision)) return "ALLOW";
   if (["BLOCK", "BLOCKED"].includes(decision)) return "BLOCK";
   if (["WARN", "WARNING"].includes(decision)) return "WARN";
-
   return "UNKNOWN";
 }
 
@@ -177,10 +168,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Browser safety assessment",
       answer:
-        "I cannot directly inspect your complete browser configuration from this chat. " +
-        "A browser's safety depends on its updates, built-in protections, installed extensions, " +
-        "downloads, saved credentials and browsing habits. A URL scan cannot prove that your " +
-        "entire browser or device is safe. The following checklist is guidance, not a completed audit.",
+        "I cannot directly inspect your complete browser configuration from this chat. A browser's safety depends on its updates, built-in protections, installed extensions, downloads, saved credentials and browsing habits. A URL scan cannot prove that your entire browser or device is safe. The following checklist is guidance, not a completed audit.",
       actions: [
         "Update your browser to the latest stable version.",
         "Enable built-in phishing and malware protection.",
@@ -203,8 +191,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Browser hardening checklist",
       answer:
-        "You can reduce browser risks by enabling built-in security features, limiting permissions " +
-        "and keeping software updated. Menu names vary by browser.",
+        "You can reduce browser risks by enabling built-in security features, limiting permissions and keeping software updated. Menu names vary by browser.",
       actions: [
         "Enable automatic browser updates.",
         "Enable Safe Browsing or equivalent phishing and malware protection.",
@@ -228,8 +215,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Phishing protection",
       answer:
-        "Phishing websites imitate trusted services to steal passwords, payment details or personal " +
-        "information. HTTPS does not prove a website is legitimate.",
+        "Phishing websites imitate trusted services to steal passwords, payment details or personal information. HTTPS does not prove a website is legitimate.",
       actions: [
         "Check the exact domain spelling.",
         "Open important services using an official bookmark or app.",
@@ -250,8 +236,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Malware and compromise response",
       answer:
-        "A suspicious URL result does not prove that your device is infected. If you suspect compromise, " +
-        "avoid interacting with suspicious files and use a trusted security product to investigate.",
+        "A suspicious URL result does not prove that your device is infected. If you suspect compromise, avoid interacting with suspicious files and use a trusted security product to investigate.",
       actions: [
         "Do not open or run suspicious downloads.",
         "Run a full scan using updated, trusted security software.",
@@ -274,9 +259,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "HTTPS and connection security",
       answer:
-        "HTTPS encrypts traffic between your browser and a website and helps authenticate the server. " +
-        "It does not prove the site is trustworthy or free of malware. IDPS Shield's HTTPS result " +
-        "should only be treated as verified if its backend actually checks the submitted URL.",
+        "HTTPS encrypts traffic between your browser and a website and helps authenticate the server. It does not prove the site is trustworthy or free of malware. IDPS Shield's HTTPS result should only be treated as verified if its backend actually checks the submitted URL.",
       actions: [
         "Do not bypass certificate or privacy warnings.",
         "Verify the domain before entering sensitive information.",
@@ -318,8 +301,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Browser privacy",
       answer:
-        "Privacy settings can reduce tracking and unnecessary data collection, but they do not make " +
-        "you completely anonymous. Websites, network providers and services may still receive information.",
+        "Privacy settings can reduce tracking and unnecessary data collection, but they do not make you completely anonymous. Websites, network providers and services may still receive information.",
       actions: [
         "Review third-party cookie and tracking protections.",
         "Restrict camera, microphone, location and notification permissions.",
@@ -340,8 +322,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Download safety",
       answer:
-        "A filename, icon or download source does not prove that a file is safe. URL analysis does not " +
-        "necessarily scan downloaded files.",
+        "A filename, icon or download source does not prove that a file is safe. URL analysis does not necessarily scan downloaded files.",
       actions: [
         "Download software from official vendor websites.",
         "Avoid unexpected email attachments and executable files.",
@@ -360,8 +341,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Understanding risk scores",
       answer:
-        "IDPS Shield's URL risk score reflects the checks configured on your backend. It is not a " +
-        "complete measurement of browser security or device health. A low score does not guarantee safety.",
+        "IDPS Shield's URL risk score reflects the checks configured on your backend. It is not a complete measurement of browser security or device health. A low score does not guarantee safety.",
       actions: [
         "Read the findings and explanations, not only the score.",
         "Avoid URLs that receive a BLOCK decision.",
@@ -380,8 +360,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
     return {
       title: "Extension safety",
       answer:
-        "Browser extensions can read or change website data depending on their permissions. " +
-        "Only install extensions you trust and understand.",
+        "Browser extensions can read or change website data depending on their permissions. Only install extensions you trust and understand.",
       actions: [
         "Remove extensions you no longer use.",
         "Review permissions and website access.",
@@ -436,9 +415,7 @@ function getSecurityAnswer(question: string): SecurityAnswer {
   return {
     title: "IDPS Security Guidance",
     answer:
-      "I can help explain browser security, privacy, phishing, malware, passwords, downloads and IDPS " +
-      "risk results. I cannot claim to have inspected your browser settings, scanned your device or " +
-      "verified a website's live reputation unless a connected security service actually performs that check.",
+      "I can help explain browser security, privacy, phishing, malware, passwords, downloads and IDPS risk results. I cannot claim to have inspected your browser settings, scanned your device or verified a website's live reputation unless a connected security service actually performs that check.",
     actions: [
       "Update your browser and operating system.",
       "Enable built-in phishing and malware protection.",
@@ -449,236 +426,256 @@ function getSecurityAnswer(question: string): SecurityAnswer {
   };
 }
 
-function ResultCard({ result }: { result: URLCheckResult }) {
+function useThemeMode() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document === "undefined") return true;
+    return document.documentElement.dataset.theme !== "light";
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateTheme = () => setIsDark(root.dataset.theme !== "light");
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark;
+}
+
+function ResultCard({
+  result,
+  isDark,
+}: {
+  result: URLCheckResult;
+  isDark: boolean;
+}) {
   const decision = decisionOf(result);
+  const styles = {
+    ALLOW: {
+      title: "No blocking indicators found",
+      color: "text-emerald-500",
+      badge: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
+      icon: ShieldCheck,
+    },
+    BLOCK: {
+      title: "Access not recommended",
+      color: "text-rose-500",
+      badge: "border-rose-500/25 bg-rose-500/10 text-rose-500",
+      icon: ShieldX,
+    },
+    WARN: {
+      title: "Caution advised",
+      color: "text-amber-500",
+      badge: "border-amber-500/25 bg-amber-500/10 text-amber-500",
+      icon: ShieldAlert,
+    },
+    UNKNOWN: {
+      title: "Decision unavailable",
+      color: isDark ? "text-slate-300" : "text-slate-600",
+      badge: isDark
+        ? "border-slate-700 bg-slate-800 text-slate-300"
+        : "border-slate-200 bg-slate-100 text-slate-600",
+      icon: Info,
+    },
+  }[decision];
 
-  const style =
-    decision === "ALLOW"
-      ? {
-          title: "No blocking indicators found",
-          color: "text-emerald-300",
-          border: "border-emerald-500/30",
-          icon: ShieldCheck,
-        }
-      : decision === "BLOCK"
-        ? {
-            title: "Access not recommended",
-            color: "text-red-300",
-            border: "border-red-500/30",
-            icon: ShieldX,
-          }
-        : decision === "WARN"
-          ? {
-              title: "Caution advised",
-              color: "text-amber-300",
-              border: "border-amber-500/30",
-              icon: ShieldAlert,
-            }
-          : {
-              title: "Decision unavailable",
-              color: "text-slate-300",
-              border: "border-slate-700",
-              icon: Info,
-            };
-
-  const DecisionIcon = style.icon;
+  const DecisionIcon = styles.icon;
   const score = Math.max(0, Math.min(100, Number(result.risk_score) || 0));
-
   const reasons = Array.isArray(result.reasons)
     ? [...new Set(result.reasons.filter((item) => typeof item === "string" && item.trim()))]
     : [];
-
   const malwareDetected = Boolean(
     result.malware?.malware_detected ?? result.malware?.detected
   );
-
   const phishingDetected = Boolean(
     result.phishing?.phishing_detected ?? result.phishing?.detected
   );
+  const httpsEnabled = result.https_enabled ?? result.url_analysis?.https_enabled;
 
-  const httpsEnabled =
-    result.https_enabled ?? result.url_analysis?.https_enabled;
+  const panel = isDark
+    ? "border-white/[0.09] bg-slate-950/45"
+    : "border-slate-200/80 bg-white/65";
+  const muted = isDark ? "text-slate-400" : "text-slate-500";
+  const primary = isDark ? "text-slate-100" : "text-slate-800";
 
   return (
-    <div className={`mt-4 overflow-hidden rounded-2xl border ${style.border} bg-slate-950`}>
-      <div className="flex items-start gap-3 bg-slate-900/80 p-4">
-        <DecisionIcon size={26} className={style.color} />
-
+    <div className={`mt-4 overflow-hidden rounded-2xl border shadow-sm ${panel}`}>
+      <div className={`flex items-start gap-3 p-4 ${isDark ? "bg-white/[0.035]" : "bg-white/55"}`}>
+        <DecisionIcon size={25} className={`${styles.color} mt-0.5 shrink-0`} />
         <div className="min-w-0 flex-1">
-          <h3 className={`font-semibold ${style.color}`}>{style.title}</h3>
-          <p className="mt-1 break-all text-sm text-slate-300">
+          <h3 className={`font-semibold ${primary}`}>{styles.title}</h3>
+          <p className={`mt-1 break-all text-sm ${muted}`}>
             {result.domain || result.url}
           </p>
-          <p className="mt-2 text-xs leading-5 text-slate-400">
+          <p className={`mt-2 text-xs leading-5 ${muted}`}>
             {result.recommendation ||
               "This result reflects configured checks and is not a guarantee of safety."}
           </p>
         </div>
-
-        <span className={`rounded-lg border px-2 py-1 text-xs font-bold ${style.color} ${style.border}`}>
+        <span className={`rounded-full border px-3 py-1 text-[10px] font-bold tracking-wider ${styles.badge}`}>
           {decision}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-px bg-slate-800 sm:grid-cols-4">
-        <div className="bg-slate-950 p-3">
-          <p className="text-xs text-slate-500">Risk score</p>
-          <p className={`mt-1 text-xl font-bold ${style.color}`}>
-            {score}<span className="text-xs font-normal text-slate-500"> / 100</span>
-          </p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full rounded-full bg-cyan-400"
-              style={{ width: `${score}%` }}
-            />
+      <div className={`grid grid-cols-2 gap-px sm:grid-cols-4 ${isDark ? "bg-white/[0.07]" : "bg-slate-200/70"}`}>
+        {[
+          {
+            label: "Risk score",
+            value: `${score}/100`,
+            extra: (
+              <div className={`mt-2 h-1.5 overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-200"}`}>
+                <div
+                  className="h-full rounded-full bg-cyan-500 transition-all"
+                  style={{ width: `${score}%` }}
+                />
+              </div>
+            ),
+          },
+          { label: "Risk level", value: result.risk_level || "UNKNOWN" },
+          {
+            label: "HTTPS",
+            value:
+              httpsEnabled === true
+                ? "Enabled"
+                : httpsEnabled === false
+                  ? "Not enabled"
+                  : "Not checked",
+          },
+          { label: "SSL/TLS", value: result.ssl_status || "Not checked" },
+        ].map((item) => (
+          <div key={item.label} className={`p-3 ${isDark ? "bg-slate-950/80" : "bg-white/75"}`}>
+            <p className={`text-xs ${muted}`}>{item.label}</p>
+            <p className={`mt-2 text-sm font-semibold ${primary}`}>{item.value}</p>
+            {item.extra}
           </div>
-        </div>
-
-        <div className="bg-slate-950 p-3">
-          <p className="text-xs text-slate-500">Risk level</p>
-          <p className="mt-2 font-semibold text-slate-200">
-            {result.risk_level || "UNKNOWN"}
-          </p>
-        </div>
-
-        <div className="bg-slate-950 p-3">
-          <p className="text-xs text-slate-500">HTTPS</p>
-          <p className={`mt-2 text-sm font-semibold ${httpsEnabled === true ? "text-emerald-300" : "text-amber-300"}`}>
-            {httpsEnabled === true
-              ? "Enabled"
-              : httpsEnabled === false
-                ? "Not enabled"
-                : "Not checked"}
-          </p>
-        </div>
-
-        <div className="bg-slate-950 p-3">
-          <p className="text-xs text-slate-500">SSL/TLS</p>
-          <p className="mt-2 text-sm font-semibold text-slate-300">
-            {result.ssl_status || "Not checked"}
-          </p>
-        </div>
+        ))}
       </div>
 
       <div className="space-y-4 p-4">
-        <h4 className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Activity size={16} className="text-cyan-300" />
+        <h4 className={`flex items-center gap-2 text-sm font-semibold ${primary}`}>
+          <Activity size={16} className="text-cyan-500" />
           Detection summary
         </h4>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <DetectionItem
-            title="Malware"
-            detected={malwareDetected}
-            unavailableText="No local list match reported"
-          />
-          <DetectionItem
-            title="Phishing"
-            detected={phishingDetected}
-            unavailableText="No local rule triggered"
-          />
+          {[
+            {
+              title: "Malware",
+              detected: malwareDetected,
+              detail: result.malware?.reason,
+              fallback: "No local list match reported",
+            },
+            {
+              title: "Phishing",
+              detected: phishingDetected,
+              detail: result.phishing?.reason,
+              fallback: "No local rule triggered",
+            },
+          ].map((item) => (
+            <div
+              key={item.title}
+              className={`flex items-center gap-3 rounded-xl border p-3 ${panel}`}
+            >
+              {item.detected ? (
+                <XCircle size={19} className="shrink-0 text-rose-500" />
+              ) : (
+                <CheckCircle2 size={19} className="shrink-0 text-emerald-500" />
+              )}
+              <div>
+                <p className={`text-sm font-medium ${primary}`}>{item.title}</p>
+                <p className={`mt-1 text-xs ${muted}`}>
+                  {item.detail || (item.detected ? "Detection reported" : item.fallback)}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-          <p className="text-xs text-slate-500">Domain reputation</p>
-          <p className="mt-1 text-sm text-slate-200">
+        <div className={`rounded-xl border p-3 ${panel}`}>
+          <p className={`text-xs ${muted}`}>Domain reputation</p>
+          <p className={`mt-1 text-sm ${primary}`}>
             {result.domain_reputation || "Unknown / not checked"}
           </p>
-
-          <p className="mt-3 text-xs text-slate-500">Analysis method</p>
-          <p className="mt-1 text-sm text-slate-200">
+          <p className={`mt-3 text-xs ${muted}`}>Analysis method</p>
+          <p className={`mt-1 text-sm ${primary}`}>
             {result.analysis_method || "Not specified"}
           </p>
+          {result.age_decision && (
+            <>
+              <p className={`mt-3 text-xs ${muted}`}>Age policy result</p>
+              <p className={`mt-1 text-sm ${primary}`}>
+                {result.age_decision}
+                {typeof result.required_age === "number"
+                  ? ` · Required age: ${result.required_age}+`
+                  : ""}
+              </p>
+            </>
+          )}
         </div>
 
-        {result.age_decision && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            <p className="text-xs text-slate-500">Age policy result</p>
-            <p className="mt-1 text-sm text-slate-200">
-              {result.age_decision}
-              {typeof result.required_age === "number"
-                ? ` · Required age: ${result.required_age}+`
-                : ""}
-            </p>
-          </div>
-        )}
-
         <div>
-          <h4 className="text-sm font-semibold text-white">
+          <h4 className={`text-sm font-semibold ${primary}`}>
             Findings and explanations
           </h4>
-
           {reasons.length > 0 ? (
             <ul className="mt-3 space-y-2">
               {reasons.map((reason, index) => (
-                <li key={`${index}-${reason}`} className="flex gap-2 text-sm text-slate-300">
-                  <span className="text-cyan-400">•</span>
+                <li key={`${index}-${reason}`} className={`flex gap-2 text-sm ${muted}`}>
+                  <span className="text-cyan-500">•</span>
                   <span>{reason}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-slate-500">
+            <p className={`mt-2 text-sm ${muted}`}>
               No specific reasons were returned by the backend.
             </p>
           )}
         </div>
 
-        <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
+        <p className={`flex items-start gap-2 text-xs leading-5 ${muted}`}>
           <Info size={15} className="mt-0.5 shrink-0" />
-          HTTPS encrypts a connection but does not prove a site is trustworthy.
-          A low risk score is not a guarantee that a site is safe.
+          HTTPS encrypts a connection but does not prove a site is trustworthy. A low risk score is not a guarantee that a site is safe.
         </p>
       </div>
     </div>
   );
 }
 
-function DetectionItem({
-  title,
-  detected,
-  unavailableText,
+function AssistantMessage({
+  message,
+  isDark,
 }: {
-  title: string;
-  detected: boolean;
-  unavailableText: string;
+  message: Message;
+  isDark: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-      {detected ? (
-        <XCircle size={19} className="shrink-0 text-red-400" />
-      ) : (
-        <CheckCircle2 size={19} className="shrink-0 text-emerald-400" />
-      )}
-
-      <div>
-        <p className="text-sm font-medium text-slate-200">{title}</p>
-        <p className="mt-1 text-xs text-slate-500">
-          {detected ? "Detection reported" : unavailableText}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function AssistantMessage({ message }: { message: Message }) {
-  return (
     <div className="flex items-start gap-3">
-      <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+      <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-500 shadow-sm">
         <Bot size={20} />
       </div>
-
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-white">IDPS Copilot</span>
-          <span className="text-xs text-slate-600">{formatTime(message.timestamp)}</span>
+          <span className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+            IDPS Copilot
+          </span>
+          <span className={`text-xs ${isDark ? "text-slate-600" : "text-slate-400"}`}>
+            {formatTime(message.timestamp)}
+          </span>
         </div>
-
-        <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-300 sm:text-base">
+        <div className={`mt-3 whitespace-pre-wrap break-words text-sm leading-7 sm:text-[15px] ${isDark ? "text-slate-300" : "text-slate-600"}`}>
           {message.text}
         </div>
-
-        {message.result && <ResultCard result={message.result} />}
+        {message.result && (
+          <ResultCard result={message.result} isDark={isDark} />
+        )}
       </div>
     </div>
   );
@@ -686,6 +683,7 @@ function AssistantMessage({ message }: { message: Message }) {
 
 export default function AIAssistant() {
   const { user } = useAuth();
+  const isDark = useThemeMode();
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -693,14 +691,11 @@ export default function AIAssistant() {
       role: "assistant",
       text:
         "Welcome to IDPS Security Copilot.\n\n" +
-        "Ask about browser safety, phishing, malware, HTTPS, passwords, privacy, " +
-        "downloads or browser extensions. You can also submit a URL for configured security checks.\n\n" +
-        "Important: general guidance is rule-based. A complete browser audit and a generative AI model " +
-        "are not connected by this component.",
+        "Ask about browser safety, phishing, malware, HTTPS, passwords, privacy, downloads or browser extensions. You can also submit a URL for configured security checks.\n\n" +
+        "Important: general guidance is rule-based. A complete browser audit and a generative AI model are not connected by this component.",
       timestamp: new Date().toISOString(),
     },
   ]);
-
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -708,12 +703,33 @@ export default function AIAssistant() {
 
   const conversationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const messageEndRef = useRef<HTMLDivElement>(null);
+
+  const surface = isDark
+    ? "border-white/[0.08] bg-slate-900/55 shadow-black/20"
+    : "border-white/80 bg-white/65 shadow-slate-200/50";
+  const innerSurface = isDark
+    ? "border-white/[0.07] bg-slate-950/35"
+    : "border-slate-200/70 bg-white/55";
+  const heading = isDark ? "text-white" : "text-slate-900";
+  const body = isDark ? "text-slate-400" : "text-slate-500";
+  const subtle = isDark ? "text-slate-500" : "text-slate-400";
+
+  // Skip the initial mount so opening this page from the sidebar
+  // does not move the main document. Later, scroll only the chat panel.
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    const container = conversationRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
       behavior: "smooth",
-      block: "end",
     });
   }, [messages, loading]);
 
@@ -740,7 +756,6 @@ export default function AIAssistant() {
         timestamp: new Date().toISOString(),
       },
     ]);
-
     setError("");
     setInput("");
     inputRef.current?.focus();
@@ -763,7 +778,6 @@ export default function AIAssistant() {
         timestamp: new Date().toISOString(),
       },
     ]);
-
     setInput("");
     setLoading(true);
     setError("");
@@ -772,7 +786,6 @@ export default function AIAssistant() {
       const response = await api.post<URLCheckResult>("/api/url/check", {
         url,
       });
-
       const result = response.data;
       const decision = decisionOf(result);
 
@@ -833,7 +846,6 @@ export default function AIAssistant() {
 
   function sendMessage(rawInput = input) {
     const value = rawInput.trim();
-
     if (!value || loading) return;
 
     setError("");
@@ -852,17 +864,13 @@ export default function AIAssistant() {
         timestamp: new Date().toISOString(),
       },
     ]);
-
     setInput("");
 
     const security = getSecurityAnswer(value);
-
     const reply =
       `${security.title}\n\n${security.answer}\n\n` +
       "Recommended actions:\n" +
-      security.actions
-        .map((action, index) => `${index + 1}. ${action}`)
-        .join("\n");
+      security.actions.map((action, index) => `${index + 1}. ${action}`).join("\n");
 
     window.setTimeout(() => {
       addAssistantMessage(reply);
@@ -874,21 +882,19 @@ export default function AIAssistant() {
     .find((message) => message.result)?.result;
 
   return (
-    <div className="mx-auto flex min-h-[850px] w-full max-w-7xl flex-col gap-5 pb-4 lg:min-h-[calc(100dvh-7rem)]">
+    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-7xl flex-col gap-5 pb-5">
+      {/* Page heading */}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-500">
             <Sparkles size={15} />
             Security operations
           </div>
-
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">
+          <h1 className={`mt-2 text-3xl font-bold tracking-tight sm:text-4xl ${heading}`}>
             AI Security Copilot
           </h1>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            Explore browser security, assess URL risk and get practical
-            recommendations for safer browsing.
+          <p className={`mt-2 max-w-2xl text-sm leading-6 ${body}`}>
+            Explore browser security, assess URL risk and get practical recommendations for safer browsing.
           </p>
         </div>
 
@@ -896,45 +902,42 @@ export default function AIAssistant() {
           type="button"
           onClick={clearConversation}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+          className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${surface} ${heading}`}
         >
           <Trash2 size={16} />
           New conversation
         </button>
       </header>
 
+      {/* Integration overview */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Wifi size={15} className="text-cyan-300" />
+        <div className={`rounded-2xl border p-4 shadow-lg backdrop-blur-2xl ${surface}`}>
+          <div className={`flex items-center gap-2 text-xs ${body}`}>
+            <Wifi size={15} className="text-cyan-500" />
             Backend integration
           </div>
-          <p className="mt-2 text-sm font-semibold text-white">URL Check API</p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Used for URL analysis
-          </p>
+          <p className={`mt-2 text-sm font-semibold ${heading}`}>URL Check API</p>
+          <p className={`mt-1 text-[11px] ${subtle}`}>Used for URL analysis</p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Shield size={15} className="text-cyan-300" />
+        <div className={`rounded-2xl border p-4 shadow-lg backdrop-blur-2xl ${surface}`}>
+          <div className={`flex items-center gap-2 text-xs ${body}`}>
+            <Shield size={15} className="text-cyan-500" />
             Guidance engine
           </div>
-          <p className="mt-2 text-sm font-semibold text-white">Security rules</p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Rule-based answers, not live AI
-          </p>
+          <p className={`mt-2 text-sm font-semibold ${heading}`}>Security rules</p>
+          <p className={`mt-1 text-[11px] ${subtle}`}>Rule-based answers, not live AI</p>
         </div>
 
-        <div className="col-span-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:col-span-1">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Clock3 size={15} className="text-violet-300" />
+        <div className={`col-span-2 rounded-2xl border p-4 shadow-lg backdrop-blur-2xl sm:col-span-1 ${surface}`}>
+          <div className={`flex items-center gap-2 text-xs ${body}`}>
+            <Clock3 size={15} className="text-violet-500" />
             Latest assessment
           </div>
-          <p className="mt-2 truncate text-sm font-semibold text-white">
+          <p className={`mt-2 truncate text-sm font-semibold ${heading}`}>
             {lastResult?.domain || "No analysis yet"}
           </p>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className={`mt-1 text-[11px] ${subtle}`}>
             {lastResult
               ? `${lastResult.risk_level} · ${lastResult.risk_score}/100`
               : "Submit a URL to begin"}
@@ -942,25 +945,22 @@ export default function AIAssistant() {
         </div>
       </div>
 
+      {/* Conversation shell */}
       <section
-        className="flex min-h-[650px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-2xl shadow-black/10 lg:min-h-[700px]"
+        className={`flex min-h-[650px] flex-1 flex-col overflow-hidden rounded-[28px] border shadow-2xl backdrop-blur-2xl lg:min-h-[700px] ${surface}`}
         aria-label="Security copilot conversation"
       >
-        <div className="flex items-center gap-3 border-b border-slate-800 bg-slate-950/50 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+        <div className={`flex items-center gap-3 border-b p-4 sm:px-5 ${isDark ? "border-white/[0.07] bg-slate-950/35" : "border-slate-200/70 bg-white/45"}`}>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-500">
             <Bot size={22} />
           </div>
-
           <div>
-            <h2 className="text-sm font-semibold text-white">
-              IDPS Security Assistant
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
+            <h2 className={`text-sm font-semibold ${heading}`}>IDPS Security Assistant</h2>
+            <p className={`mt-1 text-xs ${body}`}>
               URL analysis and browser-security guidance
             </p>
           </div>
-
-          <div className="ml-auto flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-400">
+          <div className={`ml-auto flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] ${innerSurface} ${body}`}>
             <span
               className={`h-2 w-2 rounded-full ${
                 loading ? "animate-pulse bg-amber-400" : "bg-emerald-400"
@@ -982,21 +982,24 @@ export default function AIAssistant() {
         >
           {messages.map((message) =>
             message.role === "assistant" ? (
-              <AssistantMessage key={message.id} message={message} />
+              <AssistantMessage
+                key={message.id}
+                message={message}
+                isDark={isDark}
+              />
             ) : (
               <div key={message.id} className="flex justify-end gap-3">
                 <div className="max-w-[90%] sm:max-w-[75%]">
                   <div className="mb-1 flex justify-end">
-                    <span className="text-[10px] text-slate-600">
+                    <span className={`text-[10px] ${subtle}`}>
                       You · {formatTime(message.timestamp)}
                     </span>
                   </div>
-                  <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm leading-6 text-cyan-50">
+                  <div className={`whitespace-pre-wrap break-words rounded-2xl rounded-tr-md border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm leading-6 shadow-sm ${isDark ? "text-cyan-100" : "text-cyan-800"}`}>
                     {message.text}
                   </div>
                 </div>
-
-                <div className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-300">
+                <div className={`mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${innerSurface} ${body}`}>
                   <MessageSquare size={16} />
                 </div>
               </div>
@@ -1005,53 +1008,49 @@ export default function AIAssistant() {
 
           {loading && (
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-500">
                 <Bot size={19} />
               </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3">
-                <div className="flex items-center gap-2 text-sm text-slate-300">
+              <div className={`rounded-2xl border px-4 py-3 ${innerSurface}`}>
+                <div className={`flex items-center gap-2 text-sm ${body}`}>
                   <span className="flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 [animation-delay:300ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500 [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500 [animation-delay:300ms]" />
                   </span>
                   Running configured security checks...
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  This may take a moment.
-                </p>
+                <p className={`mt-1 text-xs ${subtle}`}>This may take a moment.</p>
               </div>
             </div>
           )}
 
           {!loading && messages.length === 1 && (
             <div className="pt-2">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <p className={`mb-3 text-xs font-semibold uppercase tracking-wider ${subtle}`}>
                 Explore security topics
               </p>
-
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {QUICK_ACTIONS.map((action) => {
                   const Icon = action.icon;
-
                   return (
                     <button
                       key={action.title}
                       type="button"
                       onClick={() => sendMessage(action.prompt)}
-                      className="group rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-left transition hover:border-cyan-500/40 hover:bg-cyan-500/5"
+                      className={`group rounded-2xl border p-4 text-left shadow-sm backdrop-blur-xl transition duration-200 hover:-translate-y-1 hover:border-cyan-500/40 hover:shadow-lg ${innerSurface}`}
                     >
                       <div className="flex items-center justify-between">
-                        <Icon size={19} className="text-cyan-300" />
+                        <Icon size={19} className="text-cyan-500" />
                         <ArrowRight
                           size={15}
-                          className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-300"
+                          className={`transition group-hover:translate-x-1 group-hover:text-cyan-500 ${subtle}`}
                         />
                       </div>
-                      <p className="mt-4 text-sm font-semibold text-white">
+                      <p className={`mt-4 text-sm font-semibold ${heading}`}>
                         {action.title}
                       </p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                      <p className={`mt-1 text-xs leading-5 ${body}`}>
                         {action.description}
                       </p>
                     </button>
@@ -1061,18 +1060,20 @@ export default function AIAssistant() {
             </div>
           )}
 
-          <div ref={messageEndRef} />
-
           {showScrollButton && (
             <button
               type="button"
-              onClick={() =>
-                messageEndRef.current?.scrollIntoView({ behavior: "smooth" })
-              }
-              className="sticky bottom-2 left-full flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-white shadow-lg"
+              onClick={() => {
+                const container = conversationRef.current;
+                container?.scrollTo({
+                  top: container.scrollHeight,
+                  behavior: "smooth",
+                });
+              }}
+              className="sticky bottom-2 left-full flex h-11 w-11 items-center justify-center rounded-full border border-cyan-500/25 bg-cyan-500 text-white shadow-lg transition hover:scale-105"
               aria-label="Scroll to latest message"
             >
-              <ArrowRight size={17} className="-rotate-90" />
+              <ArrowDown size={17} />
             </button>
           )}
         </div>
@@ -1080,7 +1081,7 @@ export default function AIAssistant() {
         {error && (
           <div
             role="alert"
-            className="mx-4 mb-3 flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-sm text-red-300"
+            className="mx-4 mb-3 flex items-start gap-2 rounded-2xl border border-rose-500/25 bg-rose-500/10 p-3 text-sm text-rose-500"
           >
             <AlertTriangle size={17} className="mt-0.5 shrink-0" />
             <span>{error}</span>
@@ -1092,14 +1093,14 @@ export default function AIAssistant() {
             event.preventDefault();
             sendMessage();
           }}
-          className="border-t border-slate-800 bg-slate-950/60 p-4 sm:p-5"
+          className={`border-t p-4 sm:p-5 ${isDark ? "border-white/[0.07] bg-slate-950/35" : "border-slate-200/70 bg-white/45"}`}
         >
-          <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
-            <ShieldCheck size={15} className="text-cyan-300" />
+          <div className={`mb-3 flex items-center gap-2 text-xs ${body}`}>
+            <ShieldCheck size={15} className="text-cyan-500" />
             Ask a security question or submit a website URL
           </div>
 
-          <div className="flex items-end gap-2 rounded-2xl border border-slate-700 bg-slate-900 p-2 transition focus-within:border-cyan-500/60 focus-within:ring-2 focus-within:ring-cyan-500/10">
+          <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-inner transition focus-within:border-cyan-500/50 focus-within:ring-4 focus-within:ring-cyan-500/10 ${isDark ? "border-white/10 bg-slate-900/80" : "border-slate-200 bg-white/80"}`}>
             <input
               ref={inputRef}
               value={input}
@@ -1107,13 +1108,12 @@ export default function AIAssistant() {
               placeholder="Is my browser safe? How do I detect phishing?"
               aria-label="URL or security question"
               disabled={loading}
-              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-slate-500 disabled:opacity-50"
+              className={`min-w-0 flex-1 bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400 disabled:opacity-50 ${heading}`}
             />
-
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 text-sm font-semibold text-white shadow-md shadow-cyan-500/20 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Send message"
             >
               <Send size={16} />
@@ -1121,19 +1121,18 @@ export default function AIAssistant() {
             </button>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+          <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] ${subtle}`}>
             <span className="flex items-center gap-1.5">
               <LockKeyhole size={13} />
               Do not submit URLs containing private tokens or credentials.
             </span>
-            <span>Rule-based guidance</span>
+            <span>Rule-based guidance · URL Check API</span>
           </div>
         </form>
       </section>
 
-      <p className="text-center text-[11px] leading-5 text-slate-600">
-        IDPS Shield · Results depend on configured detection rules.
-        No scan can guarantee that a website or browser is safe.
+      <p className={`text-center text-[11px] leading-5 ${subtle}`}>
+        IDPS Shield · Results depend on configured detection rules. No scan can guarantee that a website or browser is safe.
       </p>
     </div>
   );

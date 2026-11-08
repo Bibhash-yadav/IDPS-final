@@ -1,0 +1,4 @@
+add cloude db for url check
+add other database 
+only not see http or https check it is secure and register or not all those thing
+in login add 2 factor authentation 

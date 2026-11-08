@@ -11,7 +11,10 @@ import {
   ShieldCheck,
   ShieldX,
 } from "lucide-react";
+
 import api from "../services/api";
+
+/* ================= TYPES ================= */
 
 type SecurityEvent = {
   id: number;
@@ -33,6 +36,35 @@ type EventsResponse = {
   total_pages: number;
 };
 
+/* ================= THEME HOOK ================= */
+
+function useThemeMode() {
+  const [isDark, setIsDark] = useState(
+    () => document.documentElement.dataset.theme !== "light"
+  );
+
+  useEffect(() => {
+    const updateTheme = () => {
+      setIsDark(document.documentElement.dataset.theme !== "light");
+    };
+
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark;
+}
+
+/* ================= HELPERS ================= */
+
 function normalizeDecision(decision: string | undefined): string {
   const value = (decision || "").toUpperCase();
 
@@ -43,63 +75,13 @@ function normalizeDecision(decision: string | undefined): string {
   return "UNKNOWN";
 }
 
-function severityStyle(level: string | undefined): string {
-  switch ((level || "").toUpperCase()) {
-    case "CRITICAL":
-      return "border-red-500/40 bg-red-500/10 text-red-300";
-    case "HIGH":
-      return "border-orange-500/40 bg-orange-500/10 text-orange-300";
-    case "MEDIUM":
-      return "border-amber-500/40 bg-amber-500/10 text-amber-300";
-    case "LOW":
-      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
-    default:
-      return "border-slate-600 bg-slate-800/60 text-slate-300";
-  }
-}
+function safeReasons(
+  reasons: string[] | null | undefined
+): string[] {
+  if (!Array.isArray(reasons)) return [];
 
-function decisionStyle(decision: string): string {
-  switch (decision) {
-    case "ALLOW":
-      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
-    case "WARN":
-      return "border-amber-500/40 bg-amber-500/10 text-amber-300";
-    case "BLOCK":
-      return "border-red-500/40 bg-red-500/10 text-red-300";
-    default:
-      return "border-slate-600 bg-slate-800/60 text-slate-300";
-  }
-}
-
-function DecisionIcon({ decision }: { decision: string }) {
-  if (decision === "ALLOW") {
-    return (
-      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-400">
-        <ShieldCheck size={24} aria-hidden="true" />
-      </div>
-    );
-  }
-
-  if (decision === "BLOCK") {
-    return (
-      <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-red-400">
-        <ShieldX size={24} aria-hidden="true" />
-      </div>
-    );
-  }
-
-  if (decision === "WARN") {
-    return (
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-400">
-        <ShieldAlert size={24} aria-hidden="true" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-600 bg-slate-800/60 p-3 text-slate-400">
-      <AlertTriangle size={24} aria-hidden="true" />
-    </div>
+  return reasons.filter(
+    (reason) => typeof reason === "string" && reason.trim()
   );
 }
 
@@ -129,19 +111,192 @@ function decisionDescription(decision: string): string {
   }
 }
 
-function safeReasons(reasons: string[] | null | undefined): string[] {
-  if (!Array.isArray(reasons)) return [];
-  return reasons.filter((reason) => typeof reason === "string" && reason.trim());
+/* ================= COLOR HELPERS ================= */
+
+function severityStyle(
+  level: string | undefined,
+  isDark: boolean
+): string {
+  const value = (level || "").toUpperCase();
+
+  switch (value) {
+    case "CRITICAL":
+      return isDark
+        ? "border-red-400/25 bg-red-400/10 text-red-300"
+        : "border-red-200 bg-red-50 text-red-700";
+
+    case "HIGH":
+      return isDark
+        ? "border-orange-400/25 bg-orange-400/10 text-orange-300"
+        : "border-orange-200 bg-orange-50 text-orange-700";
+
+    case "MEDIUM":
+      return isDark
+        ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+        : "border-amber-200 bg-amber-50 text-amber-700";
+
+    case "LOW":
+      return isDark
+        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+    default:
+      return isDark
+        ? "border-white/10 bg-white/5 text-slate-300"
+        : "border-slate-200 bg-slate-100 text-slate-600";
+  }
 }
 
+function decisionStyle(
+  decision: string,
+  isDark: boolean
+): string {
+  switch (decision) {
+    case "ALLOW":
+      return isDark
+        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+    case "WARN":
+      return isDark
+        ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+        : "border-amber-200 bg-amber-50 text-amber-700";
+
+    case "BLOCK":
+      return isDark
+        ? "border-red-400/25 bg-red-400/10 text-red-300"
+        : "border-red-200 bg-red-50 text-red-700";
+
+    default:
+      return isDark
+        ? "border-white/10 bg-white/5 text-slate-300"
+        : "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+/* ================= DECISION ICON ================= */
+
+function DecisionIcon({
+  decision,
+  isDark,
+}: {
+  decision: string;
+  isDark: boolean;
+}) {
+  if (decision === "ALLOW") {
+    return (
+      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-500">
+        <ShieldCheck size={23} />
+      </div>
+    );
+  }
+
+  if (decision === "BLOCK") {
+    return (
+      <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-red-500">
+        <ShieldX size={23} />
+      </div>
+    );
+  }
+
+  if (decision === "WARN") {
+    return (
+      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-500">
+        <ShieldAlert size={23} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        isDark
+          ? "border-white/10 bg-white/5 text-slate-400"
+          : "border-slate-200 bg-slate-100 text-slate-500"
+      }`}
+    >
+      <AlertTriangle size={23} />
+    </div>
+  );
+}
+
+/* ================= STAT CARD ================= */
+
+function StatCard({
+  title,
+  value,
+  description,
+  color,
+  isDark,
+}: {
+  title: string;
+  value: string | number;
+  description: string;
+  color: string;
+  isDark: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 ${
+        isDark
+          ? "border-white/[0.08] bg-white/[0.045] shadow-lg shadow-black/10"
+          : "border-white/80 bg-white/75 shadow-lg shadow-slate-200/40"
+      }`}
+    >
+      <p className={`text-sm font-medium ${color}`}>
+        {title}
+      </p>
+
+      <p
+        className={`mt-3 text-3xl font-bold tracking-tight ${
+          isDark ? "text-white" : "text-slate-900"
+        }`}
+      >
+        {value}
+      </p>
+
+      <p
+        className={`mt-2 text-xs ${
+          isDark ? "text-slate-500" : "text-slate-400"
+        }`}
+      >
+        {description}
+      </p>
+    </div>
+  );
+}
+
+/* ================= THREATS PAGE ================= */
+
 export default function Threats() {
+  const isDark = useThemeMode();
+
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [total, setTotal] = useState(0);
+
   const [search, setSearch] = useState("");
   const [severity, setSeverity] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [refreshKey, setRefreshKey] = useState(0);
+
+  /* ================= THEME STYLES ================= */
+
+  const headingClass = isDark ? "text-white" : "text-slate-900";
+
+  const mutedClass = isDark ? "text-slate-400" : "text-slate-500";
+
+  const cardClass = isDark
+    ? "border border-white/[0.08] bg-white/[0.045] shadow-[0_15px_45px_rgba(0,0,0,0.18)]"
+    : "border border-white/80 bg-white/75 shadow-[0_15px_45px_rgba(31,41,55,0.06)]";
+
+  const inputClass = isDark
+    ? "border-white/10 bg-slate-950/40 text-white placeholder:text-slate-500 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10"
+    : "border-slate-200 bg-white/80 text-slate-900 placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10";
+
+  /* ================= LOAD THREATS ================= */
 
   const loadThreats = useCallback(async () => {
     setLoading(true);
@@ -157,19 +312,18 @@ export default function Threats() {
             search: search.trim() || undefined,
             risk_level: severity || undefined,
           },
-        },
+        }
       );
 
-      // Support both paginated responses and plain event arrays.
       const payload = response.data;
+
       const allEvents = Array.isArray(payload)
         ? payload
         : Array.isArray(payload?.items)
           ? payload.items
           : [];
 
-      // This page displays events requiring attention.
-      // A LOW-risk WARN remains a warning until the backend decision changes.
+      // Display events requiring attention.
       const threats = allEvents.filter((event) => {
         const decision = normalizeDecision(event.decision);
         const level = (event.risk_level || "").toUpperCase();
@@ -187,8 +341,9 @@ export default function Threats() {
     } catch {
       setEvents([]);
       setTotal(0);
+
       setError(
-        "Could not load threat events. Check the backend, API route, and login session.",
+        "Could not load threat events. Check the backend, API route, and login session."
       );
     } finally {
       setLoading(false);
@@ -199,33 +354,51 @@ export default function Threats() {
     void loadThreats();
   }, [loadThreats, refreshKey]);
 
+  /* ================= STATISTICS ================= */
+
   const criticalCount = events.filter(
-    (event) => (event.risk_level || "").toUpperCase() === "CRITICAL",
+    (event) => (event.risk_level || "").toUpperCase() === "CRITICAL"
   ).length;
 
   const highCount = events.filter(
-    (event) => (event.risk_level || "").toUpperCase() === "HIGH",
+    (event) => (event.risk_level || "").toUpperCase() === "HIGH"
   ).length;
 
   const warningCount = events.filter(
-    (event) => normalizeDecision(event.decision) === "WARN",
+    (event) => normalizeDecision(event.decision) === "WARN"
   ).length;
 
   const blockedCount = events.filter(
-    (event) => normalizeDecision(event.decision) === "BLOCK",
+    (event) => normalizeDecision(event.decision) === "BLOCK"
   ).length;
 
+  /* ================= UI ================= */
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div
+      className={`relative mx-auto w-full max-w-7xl space-y-6 overflow-hidden p-4 transition-colors duration-300 sm:p-6 ${
+        isDark ? "text-slate-100" : "text-slate-800"
+      }`}
+    >
+      {/* Background effects */}
+
+      <div className="pointer-events-none absolute -left-32 top-10 h-72 w-72 rounded-full bg-cyan-500/[0.06] blur-[100px]" />
+
+      <div className="pointer-events-none absolute -right-32 top-96 h-72 w-72 rounded-full bg-blue-500/[0.06] blur-[100px]" />
+
+      {/* HEADER */}
+
+      <div className="relative flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <p className="text-sm font-medium text-cyan-300">
+          <p className="text-xs font-bold tracking-[0.2em] text-cyan-500">
             THREAT INTELLIGENCE
           </p>
-          <h1 className="mt-1 text-3xl font-bold text-white">
+
+          <h1 className={`mt-2 text-2xl font-bold tracking-tight sm:text-3xl ${headingClass}`}>
             Security Findings
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+
+          <p className={`mt-2 max-w-2xl text-sm leading-6 ${mutedClass}`}>
             Review warnings and blocked URLs recorded by your security checks.
             Icons and colors reflect the saved security decision.
           </p>
@@ -235,53 +408,73 @@ export default function Threats() {
           type="button"
           onClick={() => setRefreshKey((key) => key + 1)}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+          className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+            isDark
+              ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.09]"
+              : "border-slate-200 bg-white/80 text-slate-600 hover:bg-slate-100"
+          }`}
         >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          <RefreshCw
+            size={16}
+            className={loading ? "animate-spin" : ""}
+          />
           Refresh
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">Findings loaded</p>
-          <p className="mt-2 text-3xl font-bold text-white">{total}</p>
-        </div>
+      {/* STATISTICS */}
 
-        <div className="rounded-2xl border border-red-500/20 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">Critical risks</p>
-          <p className="mt-2 text-3xl font-bold text-red-300">
-            {criticalCount}
-          </p>
-        </div>
+      <div className="relative grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Findings loaded"
+          value={total}
+          description="Events requiring attention"
+          color="text-cyan-500"
+          isDark={isDark}
+        />
 
-        <div className="rounded-2xl border border-orange-500/20 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">High risks</p>
-          <p className="mt-2 text-3xl font-bold text-orange-300">
-            {highCount}
-          </p>
-        </div>
+        <StatCard
+          title="Critical risks"
+          value={criticalCount}
+          description="Highest severity findings"
+          color="text-red-500"
+          isDark={isDark}
+        />
 
-        <div className="rounded-2xl border border-amber-500/20 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">Warnings / blocked</p>
-          <p className="mt-2 text-3xl font-bold text-amber-300">
-            {warningCount} / {blockedCount}
-          </p>
-        </div>
+        <StatCard
+          title="High risks"
+          value={highCount}
+          description="High severity findings"
+          color="text-orange-500"
+          isDark={isDark}
+        />
+
+        <StatCard
+          title="Warnings / blocked"
+          value={`${warningCount} / ${blockedCount}`}
+          description="Caution and blocked decisions"
+          color="text-amber-500"
+          isDark={isDark}
+        />
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:flex-row">
+      {/* SEARCH AND FILTER */}
+
+      <div
+        className={`relative flex flex-col gap-3 rounded-2xl p-4 backdrop-blur-2xl sm:flex-row ${cardClass}`}
+      >
         <div className="relative flex-1">
           <Search
             size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+            className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${mutedClass}`}
           />
+
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search domain or URL..."
             aria-label="Search domain or URL"
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-cyan-500"
+            className={`w-full rounded-xl border py-3 pl-10 pr-4 text-sm outline-none transition-all ${inputClass}`}
           />
         </div>
 
@@ -289,7 +482,7 @@ export default function Threats() {
           value={severity}
           onChange={(event) => setSeverity(event.target.value)}
           aria-label="Filter by risk level"
-          className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-500"
+          className={`rounded-xl border px-4 py-3 text-sm outline-none transition-all ${inputClass}`}
         >
           <option value="">All risk levels</option>
           <option value="CRITICAL">Critical</option>
@@ -299,71 +492,145 @@ export default function Threats() {
         </select>
       </div>
 
+      {/* ERROR MESSAGE */}
+
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"
+          className="relative flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-500 sm:flex-row sm:items-center sm:justify-between"
         >
-          {error}
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <p>{error}</p>
+          </div>
+
           <button
             type="button"
             onClick={() => setRefreshKey((key) => key + 1)}
-            className="ml-2 underline underline-offset-4 hover:text-red-200"
+            className="w-fit font-semibold underline underline-offset-4 hover:opacity-80"
           >
             Try again
           </button>
         </div>
       )}
 
+      {/* LOADING */}
+
       {loading ? (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-10 text-center text-slate-400">
-          Loading security findings...
+        <div
+          className={`relative flex min-h-56 flex-col items-center justify-center rounded-2xl border backdrop-blur-2xl ${cardClass}`}
+        >
+          <RefreshCw size={27} className="animate-spin text-cyan-500" />
+
+          <p className={`mt-4 text-sm ${mutedClass}`}>
+            Loading security findings...
+          </p>
         </div>
       ) : events.length === 0 ? (
-        <div className="rounded-2xl border border-emerald-500/20 bg-slate-900/70 p-10 text-center">
-          <CheckCircle2
-            size={38}
-            className="mx-auto text-emerald-400"
-            aria-hidden="true"
-          />
-          <h2 className="mt-3 font-semibold text-white">
+        /* EMPTY STATE */
+
+        <div
+          className={`relative rounded-2xl border p-10 text-center backdrop-blur-2xl ${cardClass}`}
+        >
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
+            <CheckCircle2
+              size={35}
+              className="text-emerald-500"
+              aria-hidden="true"
+            />
+          </div>
+
+          <h2 className={`mt-4 text-lg font-semibold ${headingClass}`}>
             No matching warnings or blocked URLs
           </h2>
-          <p className="mt-2 text-sm text-slate-400">
+
+          <p className={`mx-auto mt-2 max-w-lg text-sm leading-6 ${mutedClass}`}>
             No matching events requiring attention were found in the loaded
             results. This does not certify that every website is safe.
           </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setSeverity("");
+              setRefreshKey((key) => key + 1);
+            }}
+            className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-500 hover:text-blue-500"
+          >
+            <RefreshCw size={15} />
+            Clear filters
+          </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        /* SECURITY EVENTS */
+
+        <div className="relative space-y-4">
           {events.map((event) => {
             const decision = normalizeDecision(event.decision);
             const reasons = safeReasons(event.reasons);
+
             const domain = event.domain || event.url || "Unknown domain";
+
+            const decisionBoxClass =
+              decision === "ALLOW"
+                ? isDark
+                  ? "border-emerald-400/20 bg-emerald-400/[0.05]"
+                  : "border-emerald-200 bg-emerald-50/70"
+                : decision === "BLOCK"
+                  ? isDark
+                    ? "border-red-400/20 bg-red-400/[0.05]"
+                    : "border-red-200 bg-red-50/70"
+                  : decision === "WARN"
+                    ? isDark
+                      ? "border-amber-400/20 bg-amber-400/[0.05]"
+                      : "border-amber-200 bg-amber-50/70"
+                    : isDark
+                      ? "border-white/10 bg-white/[0.03]"
+                      : "border-slate-200 bg-slate-50";
+
+            const decisionTextClass =
+              decision === "ALLOW"
+                ? "text-emerald-500"
+                : decision === "BLOCK"
+                  ? "text-red-500"
+                  : decision === "WARN"
+                    ? "text-amber-500"
+                    : mutedClass;
 
             return (
               <article
                 key={event.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"
+                className={`group rounded-2xl border p-5 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-0.5 ${
+                  isDark
+                    ? "border-white/[0.08] bg-white/[0.045] hover:border-cyan-400/20 hover:bg-white/[0.065]"
+                    : "border-white/80 bg-white/75 hover:border-cyan-300 hover:bg-white/95"
+                }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex min-w-0 gap-3">
-                    <DecisionIcon decision={decision} />
+                {/* Event heading */}
 
-                    <div className="min-w-0">
-                      <h2 className="break-all font-semibold text-white">
+                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <DecisionIcon
+                      decision={decision}
+                      isDark={isDark}
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <h2 className={`break-all font-semibold ${headingClass}`}>
                         {domain}
                       </h2>
 
-                      <p className="mt-1 break-all text-xs text-slate-400">
+                      <p className={`mt-1 break-all text-xs ${mutedClass}`}>
                         {event.url}
                       </p>
 
-                      <p className="mt-2 text-xs text-slate-500">
+                      <p className={`mt-2 text-xs ${mutedClass}`}>
                         {(event.event_type || "SECURITY_EVENT").replaceAll(
                           "_",
-                          " ",
+                          " "
                         )}
+
                         {event.created_at
                           ? ` · ${new Date(event.created_at).toLocaleString()}`
                           : ""}
@@ -371,82 +638,85 @@ export default function Threats() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  {/* Badges */}
+
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                     <span
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${severityStyle(event.risk_level)}`}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${severityStyle(
+                        event.risk_level,
+                        isDark
+                      )}`}
                     >
                       {event.risk_level || "UNKNOWN"}
                     </span>
 
-                    <span className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300">
+                    <span
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                        isDark
+                          ? "border-white/10 bg-white/[0.04] text-slate-300"
+                          : "border-slate-200 bg-slate-100 text-slate-600"
+                      }`}
+                    >
                       Score: {event.risk_score ?? 0}/100
                     </span>
 
                     <span
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${decisionStyle(decision)}`}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${decisionStyle(
+                        decision,
+                        isDark
+                      )}`}
                     >
                       {decision}
                     </span>
                   </div>
                 </div>
 
-                <div
-                  className={`mt-5 rounded-xl border p-3 ${
-                    decision === "ALLOW"
-                      ? "border-emerald-500/20 bg-emerald-500/5"
-                      : decision === "BLOCK"
-                        ? "border-red-500/20 bg-red-500/5"
-                        : decision === "WARN"
-                          ? "border-amber-500/20 bg-amber-500/5"
-                          : "border-slate-700 bg-slate-800/30"
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
+                {/* Decision information */}
+
+                <div className={`mt-5 rounded-xl border p-4 ${decisionBoxClass}`}>
+                  <div className="flex items-start gap-3">
                     {decision === "ALLOW" ? (
                       <CheckCircle2
-                        size={18}
-                        className="mt-0.5 shrink-0 text-emerald-400"
+                        size={19}
+                        className="mt-0.5 shrink-0 text-emerald-500"
                       />
                     ) : decision === "BLOCK" ? (
                       <ShieldX
-                        size={18}
-                        className="mt-0.5 shrink-0 text-red-400"
+                        size={19}
+                        className="mt-0.5 shrink-0 text-red-500"
                       />
                     ) : decision === "WARN" ? (
                       <ShieldAlert
-                        size={18}
-                        className="mt-0.5 shrink-0 text-amber-400"
+                        size={19}
+                        className="mt-0.5 shrink-0 text-amber-500"
                       />
                     ) : (
                       <Info
-                        size={18}
-                        className="mt-0.5 shrink-0 text-slate-400"
+                        size={19}
+                        className={`mt-0.5 shrink-0 ${mutedClass}`}
                       />
                     )}
 
                     <div>
-                      <p
-                        className={`text-sm font-semibold ${
-                          decision === "ALLOW"
-                            ? "text-emerald-300"
-                            : decision === "BLOCK"
-                              ? "text-red-300"
-                              : decision === "WARN"
-                                ? "text-amber-300"
-                                : "text-slate-300"
-                        }`}
-                      >
+                      <p className={`text-sm font-semibold ${decisionTextClass}`}>
                         {decisionLabel(decision)}
                       </p>
-                      <p className="mt-1 text-sm text-slate-400">
+
+                      <p className={`mt-1 text-sm leading-6 ${mutedClass}`}>
                         {decisionDescription(decision)}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 border-t border-slate-800 pt-4">
-                  <h3 className="text-sm font-medium text-slate-200">
+                {/* Detection details */}
+
+                <div
+                  className={`mt-5 border-t pt-4 ${
+                    isDark ? "border-white/[0.08]" : "border-slate-200"
+                  }`}
+                >
+                  <h3 className={`text-sm font-semibold ${headingClass}`}>
                     Detection details
                   </h3>
 
@@ -455,36 +725,43 @@ export default function Threats() {
                       {reasons.map((reason, index) => (
                         <li
                           key={`${event.id}-${index}`}
-                          className="flex gap-2 text-sm text-slate-400"
+                          className={`flex items-start gap-2 text-sm leading-6 ${mutedClass}`}
                         >
-                          <span
-                            className={
-                              decision === "ALLOW"
-                                ? "text-emerald-400"
-                                : decision === "BLOCK"
-                                  ? "text-red-400"
-                                  : "text-amber-400"
-                            }
-                          >
+                          <span className={`mt-0.5 ${
+                            decision === "BLOCK"
+                              ? "text-red-500"
+                              : decision === "WARN"
+                                ? "text-amber-500"
+                                : "text-cyan-500"
+                          }`}>
                             •
                           </span>
-                          <span>{reason}</span>
+
+                          <span className="break-words">{reason}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className={`mt-2 text-sm ${mutedClass}`}>
                       No detailed reasons were stored for this event.
                     </p>
                   )}
                 </div>
 
-                <div className="mt-4 flex justify-end">
+                {/* Research link */}
+
+                <div
+                  className={`mt-4 flex justify-end border-t pt-4 ${
+                    isDark ? "border-white/[0.06]" : "border-slate-100"
+                  }`}
+                >
                   <a
-                    href={`https://www.google.com/search?q=${encodeURIComponent(domain)}`}
+                    href={`https://www.google.com/search?q=${encodeURIComponent(
+                      domain
+                    )}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-xs text-cyan-300 hover:text-cyan-200"
+                    className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-cyan-500 transition hover:bg-cyan-500/10 hover:text-blue-500"
                   >
                     Research domain
                     <ExternalLink size={14} />
@@ -496,11 +773,19 @@ export default function Threats() {
         </div>
       )}
 
-      <p className="text-xs text-slate-500">
+      {/* FOOTER NOTE */}
+
+      <div
+        className={`relative border-t pt-4 text-xs leading-6 ${
+          isDark
+            ? "border-white/[0.07] text-slate-500"
+            : "border-slate-200 text-slate-400"
+        }`}
+      >
         Results are based on recorded events and configured local checks. HTTPS
         provides encryption but does not guarantee that a website is trustworthy.
         This page is not a live global threat-intelligence feed.
-      </p>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -9,8 +9,11 @@ import {
   Save,
   Info,
   CalendarDays,
+  Shield,
+  Globe,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
-
 import { useAuth } from "../context/AuthContext";
 
 type ProtectionSettings = {
@@ -19,6 +22,30 @@ type ProtectionSettings = {
   ageRestriction: boolean;
   minimumAge: number;
 };
+
+function useThemeMode() {
+  const [isDark, setIsDark] = useState(
+    () => document.documentElement.dataset.theme !== "light"
+  );
+
+  useEffect(() => {
+    const updateTheme = () => {
+      setIsDark(document.documentElement.dataset.theme !== "light");
+    };
+
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark;
+}
 
 function calculateAge(
   dateOfBirth: string | null | undefined
@@ -87,8 +114,8 @@ function isValidDomain(domain: string): boolean {
 
 export default function Protection() {
   const { user } = useAuth();
+  const isDark = useThemeMode();
 
-  // Age restriction is ON by default.
   const [settings, setSettings] = useState<ProtectionSettings>({
     safeBrowsing: true,
     strictMode: true,
@@ -110,6 +137,17 @@ export default function Protection() {
     user.age <= 120
       ? user.age
       : null);
+
+  const headingClass = isDark ? "text-white" : "text-slate-900";
+  const secondaryClass = isDark ? "text-slate-400" : "text-slate-500";
+
+  const glassClass = isDark
+    ? "border border-white/10 bg-white/[0.055] shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+    : "border border-white/80 bg-white/75 shadow-[0_12px_40px_rgba(31,41,55,0.07)]";
+
+  const inputClass = isDark
+    ? "border-white/10 bg-slate-950/50 text-white placeholder:text-slate-500 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10"
+    : "border-slate-200 bg-white/80 text-slate-900 placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10";
 
   function addDomain(value: string, type: "allow" | "block") {
     const domain = normalizeDomain(value);
@@ -159,57 +197,79 @@ export default function Protection() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-7 pb-8">
+      {/* Header */}
       <div>
-        <p className="text-sm font-medium text-cyan-300">
-          DEFENSE CONFIGURATION
-        </p>
+        <div className="mb-2 flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]" />
+          <p className="text-xs font-bold tracking-[0.2em] text-cyan-500">
+            DEFENSE CONFIGURATION
+          </p>
+        </div>
 
-        <h1 className="mt-1 text-3xl font-bold text-white">
+        <h1 className={`text-3xl font-bold tracking-tight ${headingClass}`}>
           Protection Center
         </h1>
 
-        <p className="mt-2 text-sm text-slate-400">
-          Configure browsing preferences and manage domain lists.
+        <p className={`mt-2 text-sm ${secondaryClass}`}>
+          Configure browsing preferences and manage domain protection lists.
         </p>
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-        <Info size={20} className="mt-0.5 shrink-0 text-cyan-300" />
+      {/* Information banner */}
+      <div className={`flex items-start gap-3 rounded-[22px] p-4 sm:p-5 backdrop-blur-2xl ${glassClass}`}>
+        <div className="shrink-0 rounded-xl bg-cyan-500/10 p-2.5 text-cyan-500">
+          <Info size={21} />
+        </div>
 
-        <p className="text-sm leading-6 text-slate-300">
-          Age restriction is enabled by default. These preferences and
-          domain lists currently exist only in this page's state and do not
-          yet enforce blocking in the backend.
-        </p>
+        <div>
+          <h3 className={`text-sm font-semibold ${headingClass}`}>
+            Protection configuration
+          </h3>
+
+          <p className={`mt-1 text-sm leading-6 ${secondaryClass}`}>
+            Age restriction is enabled by default. These preferences and
+            domain lists currently exist only in this page's state and do not
+            yet enforce blocking in the backend.
+          </p>
+        </div>
       </div>
 
+      {/* Status message */}
       {message && (
         <div
           role="status"
-          className="rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm text-slate-200"
+          className={`flex items-start gap-3 rounded-2xl border p-4 text-sm ${
+            isDark
+              ? "border-cyan-400/20 bg-cyan-400/[0.07] text-cyan-200"
+              : "border-cyan-200 bg-cyan-50 text-cyan-800"
+          }`}
         >
-          {message}
+          <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          <p>{message}</p>
         </div>
       )}
 
-      <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+      {/* Browsing protection */}
+      <section className={`rounded-[26px] p-5 backdrop-blur-2xl sm:p-6 ${glassClass}`}>
         <div className="flex items-center gap-3">
-          <ShieldCheck size={22} className="text-emerald-300" />
+          <div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-500">
+            <ShieldCheck size={23} />
+          </div>
 
           <div>
-            <h2 className="font-semibold text-white">
-              Browsing protection
+            <h2 className={`font-semibold ${headingClass}`}>
+              Browsing Protection
             </h2>
-
-            <p className="text-xs text-slate-400">
+            <p className={`mt-1 text-xs ${secondaryClass}`}>
               Choose your preferred protection behavior.
             </p>
           </div>
         </div>
 
-        <div className="divide-y divide-slate-800">
+        <div className={`mt-5 divide-y ${isDark ? "divide-white/[0.08]" : "divide-slate-200"}`}>
           <SettingToggle
+            isDark={isDark}
             title="Safe browsing"
             description="Enable the safe-browsing preference."
             checked={settings.safeBrowsing}
@@ -217,6 +277,7 @@ export default function Protection() {
           />
 
           <SettingToggle
+            isDark={isDark}
             title="Strict protection mode"
             description="Prefer caution when a URL's reputation is unknown."
             checked={settings.strictMode}
@@ -224,6 +285,7 @@ export default function Protection() {
           />
 
           <SettingToggle
+            isDark={isDark}
             title="Age restriction"
             description="Enable age-based protection for age-restricted websites."
             checked={settings.ageRestriction}
@@ -231,25 +293,29 @@ export default function Protection() {
           />
 
           {settings.ageRestriction && (
-            <div className="space-y-4 py-4">
-              <div className="flex items-start gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-                <CalendarDays
-                  size={21}
-                  className="mt-0.5 shrink-0 text-cyan-300"
-                />
+            <div className="space-y-5 py-5">
+              {/* Registered DOB */}
+              <div className={`flex items-start gap-3 rounded-2xl border p-4 ${
+                isDark
+                  ? "border-cyan-400/20 bg-cyan-400/[0.06]"
+                  : "border-cyan-200 bg-cyan-50/70"
+              }`}>
+                <div className="shrink-0 rounded-xl bg-cyan-500/10 p-2.5 text-cyan-500">
+                  <CalendarDays size={21} />
+                </div>
 
-                <div>
-                  <h3 className="text-sm font-medium text-white">
+                <div className="min-w-0">
+                  <h3 className={`text-sm font-semibold ${headingClass}`}>
                     Registered date of birth
                   </h3>
 
                   {user?.date_of_birth ? (
                     <>
-                      <p className="mt-1 text-sm text-slate-300">
+                      <p className={`mt-1 text-sm ${secondaryClass}`}>
                         {user.date_of_birth}
                       </p>
 
-                      <p className="mt-1 text-sm text-cyan-300">
+                      <p className="mt-1 text-sm font-semibold text-cyan-500">
                         Registered age:{" "}
                         {registeredAge !== null
                           ? `${registeredAge} years`
@@ -257,23 +323,24 @@ export default function Protection() {
                       </p>
                     </>
                   ) : (
-                    <p className="mt-1 text-sm text-amber-300">
+                    <p className="mt-1 text-sm text-amber-500">
                       Date of birth is unavailable. Update your account
                       details before using age-based checks.
                     </p>
                   )}
 
-                  <p className="mt-2 text-xs leading-5 text-slate-400">
+                  <p className={`mt-2 text-xs leading-5 ${secondaryClass}`}>
                     Your age is derived from the DOB saved to your account.
                     This page does not ask you to enter an age manually.
                   </p>
                 </div>
               </div>
 
+              {/* Minimum age */}
               <div>
                 <label
                   htmlFor="minimumAge"
-                  className="block text-sm font-medium text-slate-200"
+                  className={`block text-sm font-semibold ${headingClass}`}
                 >
                   Minimum age preference
                 </label>
@@ -284,7 +351,7 @@ export default function Protection() {
                   onChange={(event) =>
                     updateSetting("minimumAge", Number(event.target.value))
                   }
-                  className="mt-2 w-full max-w-xs rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white"
+                  className={`mt-2 w-full max-w-xs rounded-xl border px-4 py-3 text-sm outline-none transition ${inputClass}`}
                 >
                   <option value={13}>13+</option>
                   <option value={16}>16+</option>
@@ -292,7 +359,7 @@ export default function Protection() {
                   <option value={21}>21+</option>
                 </select>
 
-                <p className="mt-2 text-xs leading-5 text-slate-500">
+                <p className={`mt-2 max-w-2xl text-xs leading-5 ${secondaryClass}`}>
                   This is a preference, not proof of a website's age
                   requirements. Actual access decisions must be enforced by
                   the backend using your registered DOB and applicable rules.
@@ -303,8 +370,10 @@ export default function Protection() {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      {/* Domain lists */}
+      <div className="grid gap-5 xl:grid-cols-2">
         <DomainList
+          isDark={isDark}
           title="Allowed domains"
           description="Domains you want to add to your local allowlist."
           type="allow"
@@ -320,6 +389,7 @@ export default function Protection() {
         />
 
         <DomainList
+          isDark={isDark}
           title="Blocked domains"
           description="Domains you want to add to your local blocklist."
           type="block"
@@ -335,16 +405,18 @@ export default function Protection() {
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+      {/* Save preferences */}
+      <section className={`flex flex-wrap items-center justify-between gap-4 rounded-[24px] p-5 backdrop-blur-2xl sm:p-6 ${glassClass}`}>
         <div className="flex items-center gap-3">
-          <LockKeyhole size={22} className="text-cyan-300" />
+          <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-500">
+            <LockKeyhole size={22} />
+          </div>
 
           <div>
-            <h2 className="font-semibold text-white">
+            <h2 className={`font-semibold ${headingClass}`}>
               Protection preferences
             </h2>
-
-            <p className="text-xs text-slate-400">
+            <p className={`mt-1 text-xs ${secondaryClass}`}>
               Apply your current selections to this page session.
             </p>
           </div>
@@ -353,11 +425,27 @@ export default function Protection() {
         <button
           type="button"
           onClick={saveSettings}
-          className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-cyan-500/25"
         >
           <Save size={17} />
           Save preferences
         </button>
+      </section>
+
+      {/* Backend status note */}
+      <div className={`flex items-start gap-3 rounded-2xl border p-4 ${
+        isDark
+          ? "border-amber-400/15 bg-amber-400/[0.05]"
+          : "border-amber-200 bg-amber-50"
+      }`}>
+        <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" />
+        <p className={`text-xs leading-5 ${
+          isDark ? "text-slate-400" : "text-amber-800"
+        }`}>
+          These settings are currently frontend preferences only. Saving
+          them does not persist them to the database or enforce URL blocking
+          on the FastAPI backend.
+        </p>
       </div>
     </div>
   );
@@ -368,18 +456,22 @@ function SettingToggle({
   description,
   checked,
   onChange,
+  isDark,
 }: {
   title: string;
   description: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  isDark: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-4">
-      <div>
-        <h3 className="text-sm font-medium text-slate-200">{title}</h3>
+      <div className="min-w-0">
+        <h3 className={`text-sm font-semibold ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+          {title}
+        </h3>
 
-        <p className="mt-1 text-xs leading-5 text-slate-400">
+        <p className={`mt-1 text-xs leading-5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
           {description}
         </p>
       </div>
@@ -390,13 +482,17 @@ function SettingToggle({
         aria-checked={checked}
         aria-label={title}
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-          checked ? "bg-cyan-500" : "bg-slate-700"
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-all duration-300 ${
+          checked
+            ? "bg-cyan-500 shadow-lg shadow-cyan-500/20"
+            : isDark
+              ? "bg-slate-700"
+              : "bg-slate-300"
         }`}
       >
         <span
-          className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-            checked ? "left-6" : "left-1"
+          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-300 ${
+            checked ? "left-[26px]" : "left-1"
           }`}
         />
       </button>
@@ -413,6 +509,7 @@ function DomainList({
   domains,
   onAdd,
   onRemove,
+  isDark,
 }: {
   title: string;
   description: string;
@@ -422,19 +519,38 @@ function DomainList({
   domains: string[];
   onAdd: () => void;
   onRemove: (domain: string) => void;
+  isDark: boolean;
 }) {
-  return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-      <div className="flex items-center gap-3">
-        {type === "allow" ? (
-          <ShieldCheck size={22} className="text-emerald-300" />
-        ) : (
-          <ShieldAlert size={22} className="text-red-300" />
-        )}
+  const inputClass = isDark
+    ? "border-white/10 bg-slate-950/50 text-white placeholder:text-slate-500 focus:border-cyan-400/60"
+    : "border-slate-200 bg-white/80 text-slate-900 placeholder:text-slate-400 focus:border-cyan-500";
 
-        <div>
-          <h2 className="font-semibold text-white">{title}</h2>
-          <p className="mt-1 text-xs text-slate-400">{description}</p>
+  return (
+    <section className={`min-w-0 rounded-[24px] p-5 backdrop-blur-2xl sm:p-6 ${
+      isDark
+        ? "border border-white/10 bg-white/[0.055] shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+        : "border border-white/80 bg-white/75 shadow-[0_12px_40px_rgba(31,41,55,0.07)]"
+    }`}>
+      <div className="flex items-center gap-3">
+        <div className={`rounded-xl p-3 ${
+          type === "allow"
+            ? "bg-emerald-500/10 text-emerald-500"
+            : "bg-red-500/10 text-red-500"
+        }`}>
+          {type === "allow" ? (
+            <ShieldCheck size={22} />
+          ) : (
+            <ShieldAlert size={22} />
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <h2 className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
+            {title}
+          </h2>
+          <p className={`mt-1 text-xs leading-5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            {description}
+          </p>
         </div>
       </div>
 
@@ -445,19 +561,28 @@ function DomainList({
           onAdd();
         }}
       >
-        <input
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="example.com"
-          aria-label={title}
-          maxLength={2048}
-          className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500"
-        />
+        <div className="relative min-w-0 flex-1">
+          <Globe
+            size={17}
+            className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${
+              isDark ? "text-slate-500" : "text-slate-400"
+            }`}
+          />
+
+          <input
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="example.com"
+            aria-label={title}
+            maxLength={2048}
+            className={`w-full rounded-xl border py-3 pl-10 pr-3 text-sm outline-none transition-all focus:ring-2 focus:ring-cyan-500/10 ${inputClass}`}
+          />
+        </div>
 
         <button
           type="submit"
           aria-label={`Add to ${title}`}
-          className="rounded-xl border border-slate-700 px-3 text-slate-200 hover:bg-slate-800"
+          className="shrink-0 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 text-white shadow-lg shadow-cyan-500/15 transition hover:-translate-y-0.5"
         >
           <Plus size={19} />
         </button>
@@ -465,16 +590,27 @@ function DomainList({
 
       <div className="mt-4 space-y-2">
         {domains.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-sm text-slate-500">
-            No domains added yet.
-          </p>
+          <div className={`rounded-xl border border-dashed p-6 text-center ${
+            isDark
+              ? "border-white/10 text-slate-500"
+              : "border-slate-300 text-slate-400"
+          }`}>
+            <Globe size={22} className="mx-auto mb-2 opacity-60" />
+            <p className="text-sm">No domains added yet.</p>
+          </div>
         ) : (
           domains.map((domain) => (
             <div
               key={domain}
-              className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-3"
+              className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-3 ${
+                isDark
+                  ? "border-white/[0.08] bg-slate-950/30"
+                  : "border-slate-200 bg-white/60"
+              }`}
             >
-              <span className="break-all text-sm text-slate-200">
+              <span className={`break-all text-sm ${
+                isDark ? "text-slate-200" : "text-slate-700"
+              }`}>
                 {domain}
               </span>
 
@@ -482,7 +618,7 @@ function DomainList({
                 type="button"
                 onClick={() => onRemove(domain)}
                 aria-label={`Remove ${domain}`}
-                className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-red-500/10 hover:text-red-300"
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-red-500/10 hover:text-red-500"
               >
                 <Trash2 size={16} />
               </button>
