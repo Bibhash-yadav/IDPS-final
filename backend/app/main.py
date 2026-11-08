@@ -21,7 +21,7 @@ def get_allowed_origins() -> list[str]:
 
     frontend_url = os.getenv(
         "FRONTEND_URL",
-        "",
+        "https://idps-fp.vercel.app/",
     ).strip()
 
     if frontend_url:
