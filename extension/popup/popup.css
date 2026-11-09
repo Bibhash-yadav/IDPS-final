@@ -1,4 +1,3 @@
-
 :root {
   color-scheme: dark;
   font-family: "Segoe UI", Arial, sans-serif;
@@ -38,11 +37,16 @@ input {
   display: grid;
   width: 44px;
   height: 44px;
+  flex: 0 0 44px;
   place-items: center;
   border: 1px solid #164e63;
   border-radius: 14px;
   background: #0e2937;
   font-size: 23px;
+}
+
+.header-text {
+  min-width: 0;
 }
 
 .header h1 {
@@ -64,6 +68,7 @@ footer p {
   width: 9px;
   height: 9px;
   margin-left: auto;
+  flex: 0 0 9px;
   border-radius: 50%;
   background: #64748b;
 }
@@ -71,6 +76,11 @@ footer p {
 .dot.active {
   background: #34d399;
   box-shadow: 0 0 12px #34d39966;
+}
+
+.dot.error {
+  background: #f87171;
+  box-shadow: 0 0 12px #f8717166;
 }
 
 .protection,
@@ -88,6 +98,10 @@ footer p {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.protection-info {
+  min-width: 0;
 }
 
 .eyebrow {
@@ -145,6 +159,11 @@ footer p {
   transform: translateX(18px);
 }
 
+.switch input:disabled + .slider {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .website h3 {
   margin: 8px 0;
   font-size: 15px;
@@ -154,11 +173,13 @@ footer p {
 .primary,
 .secondary {
   width: 100%;
+  min-height: 43px;
   margin-top: 14px;
   padding: 12px;
   border-radius: 11px;
   cursor: pointer;
   font-weight: 600;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .primary {
@@ -167,12 +188,18 @@ footer p {
   color: #04111b;
 }
 
-.primary:hover {
+.primary:hover:not(:disabled) {
   background: #22d3ee;
 }
 
-.primary:disabled {
-  cursor: wait;
+.primary:active:not(:disabled),
+.secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  cursor: not-allowed;
   opacity: 0.6;
 }
 
@@ -180,6 +207,10 @@ footer p {
   border: 1px solid #334155;
   background: #111c2d;
   color: #e2e8f0;
+}
+
+.secondary:hover:not(:disabled) {
+  background: #1e293b;
 }
 
 .result-heading {
@@ -269,6 +300,7 @@ footer p {
 }
 
 .error {
+  margin: 14px 0 0;
   padding: 12px;
   border: 1px solid #7f1d1d;
   border-radius: 10px;
@@ -290,4 +322,10 @@ footer {
 
 footer p {
   line-height: 1.6;
+}
+
+button:focus-visible,
+input:focus-visible + .slider {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
 }

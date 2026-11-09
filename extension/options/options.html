@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -21,7 +20,6 @@
       </div>
     </header>
 
-    <!-- Account connection -->
     <section class="card">
       <div class="section-heading">
         <div>
@@ -38,34 +36,81 @@
         <div>
           <strong id="statusTitle">Connection required</strong>
           <p id="statusDescription">
-            Sign in to connect this extension
+            Sign in to connect this extension.
+          </p>
         </div>
       </div>
 
       <form id="loginForm">
-        <label for="email">Email address</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autocomplete="username"
-          placeholder="you@example.com"
-          required
-        >
+        <div id="credentialsSection">
+          <label for="email">Email address</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="username"
+            placeholder="you@example.com"
+            required
+          >
 
-        <label for="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autocomplete="current-password"
-          placeholder="Your IDPS password"
-          required
-        >
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Your IDPS password"
+            required
+          >
 
-        <button id="loginButton" type="submit">
-          Sign in and connect
-        </button>
+          <button id="loginButton" type="submit">
+            Sign in and continue
+          </button>
+        </div>
+
+        <div id="twoFactorSection" hidden>
+          <div class="two-factor-info">
+            <div class="two-factor-icon" aria-hidden="true">🔐</div>
+            <div>
+              <strong>Two-factor verification</strong>
+              <p id="twoFactorDescription">
+                Enter the verification code from your authenticator app or email.
+              </p>
+            </div>
+          </div>
+
+          <label for="verificationCode">Verification code</label>
+          <input
+            id="verificationCode"
+            name="verificationCode"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="Enter your 6-digit code"
+            maxlength="10"
+          >
+
+          <button id="verifyButton" type="button">
+            Verify and connect
+          </button>
+
+          <button
+            id="resendButton"
+            class="button-secondary"
+            type="button"
+            hidden
+          >
+            Resend email code
+          </button>
+
+          <button
+            id="backToLoginButton"
+            class="button-secondary"
+            type="button"
+          >
+            Back to sign in
+          </button>
+        </div>
       </form>
 
       <button
@@ -85,7 +130,6 @@
       ></p>
     </section>
 
-    <!-- Protection settings -->
     <section class="card">
       <div class="section-heading">
         <div>

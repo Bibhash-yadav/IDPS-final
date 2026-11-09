@@ -4,40 +4,93 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Website blocked | IDPS Shield</title>
+  <meta name="theme-color" content="#080d18">
+  <meta name="referrer" content="no-referrer">
+
+  <title>Website Blocked | IDPS Shield</title>
+
   <link rel="stylesheet" href="blocked.css">
 </head>
+
 <body>
   <main class="card">
-    <div class="icon">⛔</div>
+
+    <div class="icon" aria-hidden="true">⛔</div>
+
     <p class="eyebrow">IDPS SHIELD · CYBER DEFENSE</p>
+
     <h1>Navigation blocked</h1>
+
     <p class="intro">
-      The configured IDPS security checks returned a BLOCK decision.
-      Avoid continuing unless you have independently verified the destination.
+      The IDPS security engine detected a potentially dangerous
+      website and returned a BLOCK decision.
+
+      Access to this destination has been restricted
+      to help protect your browsing session.
     </p>
 
+    <div class="status">
+      <span class="status-dot"></span>
+      <span>Security engine: BLOCK</span>
+    </div>
+
     <section>
-      <h2>Requested website</h2>
-      <p id="requestedUrl" class="url"></p>
+      <h2>
+        <span>🌐</span>
+        Requested website
+      </h2>
+
+      <p id="requestedUrl" class="url">
+        Loading website...
+      </p>
     </section>
 
     <section>
-      <h2>Detection details</h2>
-      <ul id="reasons"></ul>
+      <h2>
+        <span>🔍</span>
+        Detection details
+      </h2>
+
+      <ul id="reasons">
+        <li>Loading detection information...</li>
+      </ul>
     </section>
+
+    <div class="warning">
+      <strong>Security warning</strong>
+      <p>
+        Continuing to this website may expose your device,
+        personal information, or browsing session to security threats.
+      </p>
+    </div>
 
     <div class="actions">
-      <button id="backButton">Go back</button>
-      <button id="continueButton" class="secondary">
+
+      <button id="backButton" type="button">
+        ← Go back
+      </button>
+
+      <button
+        id="continueButton"
+        class="secondary"
+        type="button"
+      >
         Continue anyway
       </button>
+
     </div>
 
     <p class="notice">
-      Continuing may expose you to malicious content. IDPS assessments
-      are heuristic and may be incomplete.
+      IDPS Shield uses automated security analysis.
+      Assessments may contain false positives or false negatives.
+      Always verify suspicious websites independently.
     </p>
+
+    <footer>
+      <span>🛡 IDPS Shield</span>
+      <span>Intelligent Cyber Defense System</span>
+    </footer>
+
   </main>
 
   <script src="blocked.js"></script>

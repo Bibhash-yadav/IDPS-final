@@ -1,31 +1,46 @@
-
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080d18">
   <title>IDPS Shield</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <main class="app">
     <header class="header">
-      <div class="brand-icon">🛡️</div>
-      <div>
+      <div class="brand-icon" aria-hidden="true">🛡️</div>
+
+      <div class="header-text">
         <h1>IDPS Shield</h1>
         <p>Browser Protection</p>
       </div>
-      <span id="statusDot" class="dot"></span>
+
+      <span
+        id="statusDot"
+        class="dot"
+        role="status"
+        aria-label="Protection connection status"
+        title="Connection status"
+      ></span>
     </header>
 
     <section class="protection">
-      <div>
+      <div class="protection-info">
         <span class="eyebrow">PROTECTION STATUS</span>
         <h2 id="protectionStatus">Checking…</h2>
-        <p id="configurationMessage">Connecting to your IDPS setup.</p>
+        <p id="configurationMessage">
+          Connecting to your IDPS setup.
+        </p>
       </div>
-      <label class="switch">
-        <input id="protectionToggle" type="checkbox">
+
+      <label class="switch" aria-label="Toggle navigation protection">
+        <input
+          id="protectionToggle"
+          type="checkbox"
+          disabled
+        >
         <span class="slider"></span>
       </label>
     </section>
@@ -36,13 +51,23 @@
       <p id="url">Open a website to check it.</p>
     </section>
 
-    <button id="checkButton" class="primary">
+    <button
+      id="checkButton"
+      class="primary"
+      type="button"
+      disabled
+    >
       Check Current Website
     </button>
 
-    <section id="resultCard" class="result hidden">
+    <section
+      id="resultCard"
+      class="result hidden"
+      aria-live="polite"
+    >
       <div class="result-heading">
         <span id="resultIcon" class="result-icon">●</span>
+
         <div>
           <h3 id="resultTitle">Assessment</h3>
           <p id="resultSubtitle"></p>
@@ -54,7 +79,15 @@
         <strong id="riskScore">—/100</strong>
       </div>
 
-      <div class="meter">
+      <div
+        class="meter"
+        role="progressbar"
+        aria-label="Website risk score"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+        id="scoreMeterContainer"
+      >
         <div id="scoreMeter"></div>
       </div>
 
@@ -63,11 +96,25 @@
       <ul id="reasonList"></ul>
     </section>
 
-    <p id="errorMessage" class="error hidden"></p>
+    <p
+      id="errorMessage"
+      class="error hidden"
+      role="alert"
+      aria-live="assertive"
+    ></p>
 
     <footer>
-      <button id="settingsButton" class="secondary">Extension Settings</button>
-      <p>Local heuristics are indicators, not a guarantee of safety.</p>
+      <button
+        id="settingsButton"
+        class="secondary"
+        type="button"
+      >
+        Extension Settings
+      </button>
+
+      <p>
+        Local heuristics are indicators, not a guarantee of safety.
+      </p>
     </footer>
   </main>
 

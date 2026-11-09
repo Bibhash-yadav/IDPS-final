@@ -1,13 +1,22 @@
-
 "use strict";
+
+// IDPS Shield — Browser Popup
+// Authentication and 2FA are handled in options.js.
+// The background script handles authenticated backend requests.
 
 const $ = (id) => document.getElementById(id);
 
 let currentUrl = "";
+let currentTabId = null;
 let isChecking = false;
+let isLoading = false;
+
+const checkButton = $("checkButton");
+const protectionToggle = $("protectionToggle");
 
 function showError(message) {
   const errorElement = $("errorMessage");
+
   if (!errorElement) return;
 
   errorElement.textContent = message;
@@ -16,20 +25,45 @@ function showError(message) {
 
 function clearError() {
   const errorElement = $("errorMessage");
+
   if (!errorElement) return;
 
   errorElement.textContent = "";
   errorElement.classList.add("hidden");
 }
 
+function setStatusDot(status) {
+  const dot = $("statusDot");
+
+  dot.classList.remove("active", "error");
+
+  if (status === "connected") {
+    dot.classList.add("active");
+    dot.title = "Connected to IDPS";
+  } else if (status === "error") {
+    dot.classList.add("error");
+    dot.title = "Connection needs attention";
+  } else {
+    dot.title = "Not connected";
+  }
+}
+
+function setCheckButton(enabled, text = "Check Current Website") {
+  checkButton.disabled = !enabled;
+  checkButton.textContent = text;
+}
+
 function getDecisionStyle(decision, riskLevel) {
-  if (decision === "BLOCK" || ["HIGH", "CRITICAL"].includes(riskLevel)) {
+  if (
+    decision === "BLOCK" ||
+    ["HIGH", "CRITICAL"].includes(riskLevel)
+  ) {
     return {
       className: "danger",
       icon: "⛔",
       title: decision === "BLOCK"
         ? "Website blocked by IDPS Shield"
-        : "High-risk website detected",
+        : "High-risk website detected"
     };
   }
 
@@ -37,7 +71,7 @@ function getDecisionStyle(decision, riskLevel) {
     return {
       className: "warn",
       icon: "⚠",
-      title: "Caution advised",
+      title: "Caution advised"
     };
   }
 
@@ -45,23 +79,59 @@ function getDecisionStyle(decision, riskLevel) {
     return {
       className: "safe",
       icon: "✓",
-      title: "No configured blocking indicators found",
+      title: "No configured blocking indicators found"
     };
   }
 
   return {
     className: "warn",
     icon: "!",
-    title: "Unknown security decision",
+    title: "Unknown security decision"
   };
 }
 
+function normalizeReasons(reasons) {
+  if (!Array.isArray(reasons)) {
+    return [];
+  }
+
+  return reasons
+    .map((reason) => {
+      if (typeof reason === "string") {
+        return reason;
+      }
+
+      if (reason && typeof reason === "object") {
+        return (
+          reason.message ||
+          reason.description ||
+          reason.reason ||
+          JSON.stringify(reason)
+        );
+      }
+
+      return String(reason);
+    })
+    .filter(Boolean);
+}
+
 function displayResult(result) {
-  const decision = String(result?.decision || "UNKNOWN").toUpperCase();
-  const riskLevel = String(result?.risk_level || "UNKNOWN").toUpperCase();
+  if (!result || typeof result !== "object") {
+    throw new Error("The backend returned an invalid scan result.");
+  }
+
+  const decision = String(
+    result.decision || "UNKNOWN"
+  ).toUpperCase();
+
+  const riskLevel = String(
+    result.risk_level || "UNKNOWN"
+  ).toUpperCase();
+
   const style = getDecisionStyle(decision, riskLevel);
 
-  const parsedScore = Number(result?.risk_score);
+  const parsedScore = Number(result.risk_score);
+
   const score = Number.isFinite(parsedScore)
     ? Math.max(0, Math.min(100, parsedScore))
     : 0;
@@ -72,9 +142,16 @@ function displayResult(result) {
 
   $("resultIcon").textContent = style.icon;
   $("resultTitle").textContent = style.title;
-  $("resultSubtitle").textContent = `${decision} · ${riskLevel} risk`;
+  $("resultSubtitle").textContent =
+    `${decision} · ${riskLevel} risk`;
+
   $("riskScore").textContent = `${score}/100`;
   $("scoreMeter").style.width = `${score}%`;
+
+  $("scoreMeterContainer").setAttribute(
+    "aria-valuenow",
+    String(score)
+  );
 
   $("scoreMeter").style.background =
     style.className === "danger"
@@ -83,21 +160,24 @@ function displayResult(result) {
         ? "#fbbf24"
         : "#34d399";
 
-  $("resultExplanation").textContent =
-    decision === "ALLOW"
-      ? "The configured checks did not find a blocking condition. This does not guarantee the website is safe."
-      : decision === "WARN"
-        ? "The security engine recommends caution. Review the reported reasons."
-        : decision === "BLOCK"
-          ? "The security engine returned BLOCK. IDPS Shield will redirect this tab to its blocked page."
-          : "The security engine returned an unknown decision. Do not assume this website is safe.";
+  if (decision === "ALLOW") {
+    $("resultExplanation").textContent =
+      "The configured checks did not find a blocking condition. This does not guarantee the website is safe.";
+  } else if (decision === "WARN") {
+    $("resultExplanation").textContent =
+      "The security engine recommends caution. Review the reported reasons.";
+  } else if (decision === "BLOCK") {
+    $("resultExplanation").textContent =
+      "The security engine returned BLOCK. IDPS Shield will redirect this tab to its blocked page.";
+  } else {
+    $("resultExplanation").textContent =
+      "The security engine returned an unknown decision. Do not assume this website is safe.";
+  }
 
   const list = $("reasonList");
   list.replaceChildren();
 
-  const reasons = Array.isArray(result?.reasons)
-    ? result.reasons
-    : [];
+  const reasons = normalizeReasons(result.reasons);
 
   if (reasons.length === 0) {
     const item = document.createElement("li");
@@ -106,7 +186,7 @@ function displayResult(result) {
   } else {
     for (const reason of reasons) {
       const item = document.createElement("li");
-      item.textContent = String(reason);
+      item.textContent = reason;
       list.appendChild(item);
     }
   }
@@ -117,38 +197,69 @@ function displayResult(result) {
 async function getCurrentTab() {
   const tabs = await chrome.tabs.query({
     active: true,
-    currentWindow: true,
+    currentWindow: true
   });
 
   return tabs[0] || null;
 }
 
+function updateWebsiteDetails(tab) {
+  currentUrl = tab?.url || "";
+  currentTabId = tab?.id ?? null;
+
+  $("resultCard").classList.add("hidden");
+
+  if (!currentUrl) {
+    $("domain").textContent = "No active website";
+    $("url").textContent = "Open a website to check it.";
+    setCheckButton(false);
+    return;
+  }
+
+  let parsed;
+
+  try {
+    parsed = new URL(currentUrl);
+  } catch {
+    $("domain").textContent = "Browser internal page";
+    $("url").textContent =
+      "Only HTTP and HTTPS websites can be checked.";
+
+    setCheckButton(false);
+    return;
+  }
+
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    $("domain").textContent = parsed.hostname || "Browser page";
+    $("url").textContent =
+      "Only normal HTTP and HTTPS websites can be checked.";
+
+    setCheckButton(false);
+    return;
+  }
+
+  $("domain").textContent = parsed.hostname;
+  $("url").textContent = currentUrl;
+
+  setCheckButton(true);
+}
+
 async function loadPopup() {
+  if (isLoading) return;
+
+  isLoading = true;
   clearError();
+
+  protectionToggle.disabled = true;
+  setCheckButton(false, "Loading…");
 
   try {
     const tab = await getCurrentTab();
 
-    currentUrl = tab?.url || "";
-
-    if (currentUrl) {
-      try {
-        const parsed = new URL(currentUrl);
-
-        $("domain").textContent = parsed.hostname;
-        $("url").textContent = currentUrl;
-      } catch {
-        $("domain").textContent = "Browser internal page";
-        $("url").textContent =
-          "Only HTTP and HTTPS websites can be checked.";
-      }
-    } else {
-      $("domain").textContent = "No active website";
-      $("url").textContent = "Open an HTTP or HTTPS website first.";
-    }
+    updateWebsiteDetails(tab);
 
     const response = await chrome.runtime.sendMessage({
-      type: "IDPS_GET_SETTINGS",
+      type: "IDPS_GET_SETTINGS"
     });
 
     if (!response?.success) {
@@ -157,69 +268,86 @@ async function loadPopup() {
       );
     }
 
+    const settings = response.settings || {};
+
     const protectionEnabled = Boolean(
-      response.settings?.protectionEnabled
+      settings.protectionEnabled
     );
+
     const configured = Boolean(response.configured);
 
-    $("protectionToggle").checked = protectionEnabled;
+    protectionToggle.checked = protectionEnabled;
 
-    $("protectionStatus").textContent = !protectionEnabled
-      ? "Protection paused"
-      : configured
-        ? "Protection enabled"
-        : "Sign-in required";
+    protectionToggle.disabled = false;
 
-    $("configurationMessage").textContent = configured
-      ? "Backend token configured."
-      : "Open Extension Settings and sign in to your IDPS account.";
+    if (!protectionEnabled) {
+      $("protectionStatus").textContent = "Protection paused";
 
-    $("statusDot").classList.toggle(
-      "active",
-      protectionEnabled && configured
+      $("configurationMessage").textContent = configured
+        ? "Your IDPS account is connected, but navigation checks are paused."
+        : "Sign in to your IDPS account to enable protection.";
+    } else if (configured) {
+      $("protectionStatus").textContent = "Protection enabled";
+
+      $("configurationMessage").textContent =
+        "Your IDPS account is connected and ready to scan websites.";
+    } else {
+      $("protectionStatus").textContent = "Sign-in required";
+
+      $("configurationMessage").textContent =
+        "Open Extension Settings and sign in to your IDPS account.";
+    }
+
+    setStatusDot(
+      configured
+        ? "connected"
+        : "disconnected"
     );
 
     if (response.authStatus?.expired) {
+      setStatusDot("error");
+
       showError(
         response.authStatus.message ||
           "Your session expired. Sign in again in Extension Settings."
       );
     }
+
+    setCheckButton(
+      configured && protectionEnabled && Boolean(currentUrl) &&
+        /^https?:\/\//i.test(currentUrl)
+    );
+
+    if (!configured && protectionEnabled) {
+      showError(
+        "Connect your IDPS account in Extension Settings before scanning websites."
+      );
+    }
   } catch (error) {
+    protectionToggle.disabled = true;
+    setStatusDot("error");
+
+    $("protectionStatus").textContent = "Connection error";
+    $("configurationMessage").textContent =
+      "Unable to load your protection settings.";
+
+    setCheckButton(false);
+
     showError(
       error instanceof Error
         ? error.message
         : "Unable to load extension settings."
     );
+  } finally {
+    isLoading = false;
   }
 }
 
-async function redirectCurrentTabToBlockedPage(result) {
-  const tab = await getCurrentTab();
+// --------------------------------------------------
+// Check current website
+// --------------------------------------------------
 
-  if (!tab?.id || !tab.url || !/^https?:\/\//i.test(tab.url)) {
-    throw new Error(
-      "The current browser tab cannot be redirected to the blocked page."
-    );
-  }
-
-  const params = new URLSearchParams({
-    url: tab.url,
-    reason: Array.isArray(result.reasons)
-      ? result.reasons.join("; ")
-      : "Blocked by IDPS Shield security policy.",
-  });
-
-  await chrome.tabs.update(tab.id, {
-    url: chrome.runtime.getURL(
-      `blocked/blocked.html?${params.toString()}`
-    ),
-  });
-
-  window.close();
-}
-
-$("checkButton").addEventListener("click", async () => {
+checkButton.addEventListener("click", async () => {
   clearError();
 
   if (isChecking) return;
@@ -230,55 +358,114 @@ $("checkButton").addEventListener("click", async () => {
   }
 
   isChecking = true;
-  $("checkButton").disabled = true;
-  $("checkButton").textContent = "Checking website…";
+
+  setCheckButton(false, "Checking website…");
+
+  $("resultCard").classList.add("hidden");
 
   try {
+    // The background script must use the saved access token
+    // to authenticate this request with the FastAPI backend.
     const response = await chrome.runtime.sendMessage({
       type: "IDPS_CHECK_URL",
-      url: currentUrl,
+      url: currentUrl
     });
 
     if (!response?.success) {
-      throw new Error(response?.error || "URL check failed.");
+      throw new Error(
+        response?.error || "URL check failed."
+      );
     }
 
-    const result = response.result;
-    displayResult(result);
+    if (!response.result) {
+      throw new Error(
+        "The background script did not return a scan result."
+      );
+    }
 
-    if (
-      String(result?.decision || "").toUpperCase() === "BLOCK"
-    ) {
-      await redirectCurrentTabToBlockedPage(result);
+    displayResult(response.result);
+
+    const decision = String(
+      response.result.decision || ""
+    ).toUpperCase();
+
+    if (decision === "BLOCK") {
+      await redirectCurrentTabToBlockedPage(response.result);
+      return;
     }
   } catch (error) {
     showError(
-      error instanceof Error ? error.message : "URL check failed."
+      error instanceof Error
+        ? error.message
+        : "URL check failed."
     );
   } finally {
     isChecking = false;
 
-    const checkButton = $("checkButton");
-
-    if (checkButton) {
-      checkButton.disabled = false;
-      checkButton.textContent = "Check Current Website";
+    // Restore the button only if the popup is still open.
+    if (document.contains(checkButton)) {
+      setCheckButton(
+        Boolean(currentUrl) && /^https?:\/\//i.test(currentUrl)
+      );
     }
   }
 });
 
-$("protectionToggle").addEventListener("change", async (event) => {
+// --------------------------------------------------
+// Redirect blocked website
+// --------------------------------------------------
+
+async function redirectCurrentTabToBlockedPage(result) {
+  const tab = await getCurrentTab();
+
+  if (
+    !tab?.id ||
+    tab.id !== currentTabId ||
+    !tab.url ||
+    !/^https?:\/\//i.test(tab.url)
+  ) {
+    throw new Error(
+      "The current browser tab cannot be redirected to the blocked page."
+    );
+  }
+
+  const reasons = normalizeReasons(result.reasons);
+
+  const params = new URLSearchParams({
+    url: tab.url,
+    reason: reasons.length
+      ? reasons.join("; ")
+      : "Blocked by IDPS Shield security policy."
+  });
+
+  const blockedPageUrl = chrome.runtime.getURL(
+    `blocked/blocked.html?${params.toString()}`
+  );
+
+  await chrome.tabs.update(tab.id, {
+    url: blockedPageUrl
+  });
+
+  window.close();
+}
+
+// --------------------------------------------------
+// Protection toggle
+// --------------------------------------------------
+
+protectionToggle.addEventListener("change", async (event) => {
   clearError();
 
   const toggle = event.currentTarget;
   const requestedState = toggle.checked;
+  const previousState = !requestedState;
 
   toggle.disabled = true;
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: "IDPS_SET_PROTECTION",
-      enabled: requestedState,
+      enabled: requestedState
     });
 
     if (!response?.success) {
@@ -289,20 +476,28 @@ $("protectionToggle").addEventListener("change", async (event) => {
 
     await loadPopup();
   } catch (error) {
-    toggle.checked = !requestedState;
+    toggle.checked = previousState;
 
     showError(
       error instanceof Error
         ? error.message
         : "Could not update protection."
     );
-  } finally {
+
     toggle.disabled = false;
   }
 });
 
+// --------------------------------------------------
+// Open extension settings
+// --------------------------------------------------
+
 $("settingsButton").addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
+
+// --------------------------------------------------
+// Initialize popup
+// --------------------------------------------------
 
 void loadPopup();
