@@ -1,10 +1,10 @@
 
+import json
 import logging
 import os
-import smtplib
-import ssl
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 
 from dotenv import load_dotenv
 
@@ -103,14 +103,12 @@ PENDING_REGISTRATION_EXPIRE_MINUTES = int(
     os.getenv("PENDING_REGISTRATION_EXPIRE_MINUTES", "30")
 )
 
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL")
-SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "20"))
-SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() == "true"
-SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").strip().lower() == "true"
+# Brevo transactional email API (HTTPS port 443).
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+BREVO_FROM_EMAIL = os.getenv("BREVO_FROM_EMAIL")
+BREVO_FROM_NAME = os.getenv("BREVO_FROM_NAME", "IDPS Shield")
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+EMAIL_API_TIMEOUT_SECONDS = int(os.getenv("EMAIL_API_TIMEOUT_SECONDS", "20"))
 
 
 # =========================================================
@@ -158,27 +156,21 @@ def send_email_otp(
     otp: str,
     purpose: str = "verification",
 ) -> None:
-    """Send an OTP using Gmail SMTP (App Password required for Gmail)."""
-    required_settings = {
-        "SMTP_HOST": SMTP_HOST,
-        "SMTP_USERNAME": SMTP_USERNAME,
-        "SMTP_PASSWORD": SMTP_PASSWORD,
-        "SMTP_FROM_EMAIL": SMTP_FROM_EMAIL,
-    }
-    missing_settings = [name for name, value in required_settings.items() if not value]
+    """Send an IDPS verification code through Brevo's HTTPS API."""
 
-    if missing_settings:
-        logger.error("Email configuration is incomplete; missing: %s", ", ".join(missing_settings))
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email service is not configured. Check the backend SMTP environment variables.",
+    if not BREVO_API_KEY or not BREVO_FROM_EMAIL:
+        missing = []
+        if not BREVO_API_KEY:
+            missing.append("BREVO_API_KEY")
+        if not BREVO_FROM_EMAIL:
+            missing.append("BREVO_FROM_EMAIL")
+        logger.error(
+            "Brevo email configuration is incomplete; missing: %s",
+            ", ".join(missing),
         )
-
-    if SMTP_USE_SSL and SMTP_USE_TLS:
-        logger.error("Invalid SMTP configuration: SMTP_USE_SSL and SMTP_USE_TLS cannot both be true.")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email service configuration is invalid.",
+            detail="Email service is not configured. Check the Brevo environment variables.",
         )
 
     if purpose == "registration":
@@ -191,12 +183,7 @@ def send_email_otp(
         subject = "IDPS Shield - Verification Code"
         heading = "Your verification code"
 
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = SMTP_FROM_EMAIL
-    message["To"] = recipient
-    message.set_content(
-        f"""Hello,
+    text_content = f"""Hello,
 
 {heading}
 
@@ -212,56 +199,95 @@ If you did not request this code, you can ignore this email.
 
 IDPS Shield Security Team
 """
+
+    html_content = f"""<!doctype html>
+<html>
+  <body style="font-family:Arial,sans-serif;color:#222;line-height:1.6">
+    <h2>{heading}</h2>
+    <p>Your IDPS Shield verification code is:</p>
+    <p style="font-size:30px;font-weight:bold;letter-spacing:6px">{otp}</p>
+    <p>This code expires in {OTP_EXPIRE_MINUTES} minutes.</p>
+    <p><strong>Do not share this code with anyone.</strong></p>
+    <p>If you did not request this code, you can ignore this email.</p>
+    <p>IDPS Shield Security Team</p>
+  </body>
+</html>
+"""
+
+    payload = {
+        "sender": {"name": BREVO_FROM_NAME, "email": BREVO_FROM_EMAIL},
+        "to": [{"email": recipient}],
+        "subject": subject,
+        "textContent": text_content,
+        "htmlContent": html_content,
+    }
+
+    request = urllib.request.Request(
+        BREVO_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+        },
+        method="POST",
     )
 
     try:
-        tls_context = ssl.create_default_context()
+        with urllib.request.urlopen(
+            request,
+            timeout=EMAIL_API_TIMEOUT_SECONDS,
+        ) as response:
+            if not 200 <= response.status < 300:
+                response_body = response.read().decode("utf-8", errors="replace")
+                logger.error(
+                    "Brevo rejected email delivery with HTTP %s: %s",
+                    response.status,
+                    response_body[:1000],
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to send verification email. Check Brevo sender verification and account status.",
+                )
+            logger.info(
+                "IDPS verification email accepted by Brevo (HTTP %s).",
+                response.status,
+            )
 
-        if SMTP_USE_SSL:
-            # Use only when the SMTP provider supports implicit TLS (commonly port 465).
-            with smtplib.SMTP_SSL(
-                SMTP_HOST,
-                SMTP_PORT,
-                timeout=SMTP_TIMEOUT_SECONDS,
-                context=tls_context,
-            ) as server:
-                server.ehlo()
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(message)
-        else:
-            # Gmail's usual submission setting is port 587 with STARTTLS.
-            with smtplib.SMTP(
-                SMTP_HOST,
-                SMTP_PORT,
-                timeout=SMTP_TIMEOUT_SECONDS,
-            ) as server:
-                server.ehlo()
-                if SMTP_USE_TLS:
-                    server.starttls(context=tls_context)
-                    server.ehlo()
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(message)
-
-    except (smtplib.SMTPException, OSError, TimeoutError, ssl.SSLError):
-        # Keep the detailed exception in Render logs, but never expose credentials
-        # or provider responses to the frontend.
-        logger.exception(
-            "Gmail SMTP delivery failed (host=%s, port=%s, ssl=%s, starttls=%s).",
-            SMTP_HOST,
-            SMTP_PORT,
-            SMTP_USE_SSL,
-            SMTP_USE_TLS,
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        logger.error(
+            "Brevo email API returned HTTP %s: %s",
+            exc.code,
+            error_body[:1500],
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Unable to send verification email. Check the backend email service and Render logs.",
+            detail=(
+                "Unable to send verification email. Check the Brevo API key, "
+                "verified sender, and account sending status."
+            ),
+        ) from exc
+
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        logger.exception(
+            "Could not connect to Brevo email API (HTTPS). Reason: %s",
+            getattr(exc, "reason", str(exc)),
         )
-    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to connect to the email service. Check the backend logs.",
+        ) from exc
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
         logger.exception("Unexpected error while sending an IDPS verification email.")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unable to send verification email. Check the backend logs.",
-        )
+        ) from exc
 
 
 # =========================================================
