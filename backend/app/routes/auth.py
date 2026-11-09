@@ -1,8 +1,7 @@
 import logging
 import os
-import smtplib
+import resend
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 
 from dotenv import load_dotenv
 
@@ -101,16 +100,13 @@ PENDING_REGISTRATION_EXPIRE_MINUTES = int(
     os.getenv("PENDING_REGISTRATION_EXPIRE_MINUTES", "30")
 )
 
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL")
-
-SMTP_USE_TLS = os.getenv(
-    "SMTP_USE_TLS",
-    "true",
-).lower() == "true"
+# Resend email API configuration.
+# Keep the API key in backend environment variables only.
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM_EMAIL = os.getenv(
+    "RESEND_FROM_EMAIL",
+    "IDPS Shield <onboarding@resend.dev>",
+)
 
 
 # =========================================================
@@ -158,13 +154,11 @@ def send_email_otp(
     otp: str,
     purpose: str = "verification",
 ) -> None:
-
-    if not all([
-        SMTP_HOST,
-        SMTP_USERNAME,
-        SMTP_PASSWORD,
-        SMTP_FROM_EMAIL,
-    ]):
+    """
+    Send registration or email-2FA OTP through the Resend HTTPS API.
+    The signature stays unchanged so existing routes continue working.
+    """
+    if not RESEND_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Email service is not configured.",
@@ -173,24 +167,14 @@ def send_email_otp(
     if purpose == "registration":
         subject = "IDPS Shield - Email Verification"
         heading = "Verify your email address"
-
     elif purpose == "two_factor":
         subject = "IDPS Shield - Two-Factor Authentication"
         heading = "Your login verification code"
-
     else:
         subject = "IDPS Shield - Verification Code"
         heading = "Your verification code"
 
-    message = EmailMessage()
-
-    message["Subject"] = subject
-    message["From"] = SMTP_FROM_EMAIL
-    message["To"] = recipient
-
-    message.set_content(
-        f"""
-Hello,
+    plain_text = f"""Hello,
 
 {heading}
 
@@ -206,45 +190,60 @@ If you did not request this code, you can ignore this email.
 
 IDPS Shield Security Team
 """
-    )
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{subject}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f3f4f6;
+             font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <div style="max-width:520px;margin:24px auto;padding:28px;
+                background:#ffffff;border:1px solid #e5e7eb;
+                border-radius:14px;">
+        <h2 style="margin-top:0;color:#111827;">IDPS Shield</h2>
+        <h3>{heading}</h3>
+        <p>Your verification code is:</p>
+        <div style="margin:24px 0;padding:18px;text-align:center;
+                    background:#f3f4f6;border-radius:10px;
+                    font-size:32px;font-weight:700;letter-spacing:8px;">
+            {otp}
+        </div>
+        <p>This code expires in {OTP_EXPIRE_MINUTES} minutes.</p>
+        <p><strong>Do not share this code with anyone.</strong></p>
+        <p style="color:#6b7280;font-size:13px;">
+            If you did not request this code, you can ignore this email.
+        </p>
+        <p style="margin-bottom:0;">IDPS Shield Security Team</p>
+    </div>
+</body>
+</html>
+"""
 
     try:
-        with smtplib.SMTP(
-            SMTP_HOST,
-            SMTP_PORT,
-            timeout=15,
-        ) as server:
+        resend.api_key = RESEND_API_KEY
 
-            if SMTP_USE_TLS:
-                server.starttls()
+        resend.Emails.send({
+            "from": RESEND_FROM_EMAIL,
+            "to": [recipient],
+            "subject": subject,
+            "text": plain_text,
+            "html": html_content,
+        })
 
-            server.login(
-                SMTP_USERNAME,
-                SMTP_PASSWORD,
-            )
-
-            server.send_message(message)
-
-    except (smtplib.SMTPException, OSError, TimeoutError) as exc:
-
-        logger.exception(
-            "SMTP delivery failed for recipient domain=%s; error_type=%s",
+        logger.info(
+            "Verification email accepted by Resend for recipient domain=%s",
             recipient.rsplit("@", 1)[-1] if "@" in recipient else "unknown",
-            type(exc).__name__,
         )
-
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Unable to send verification email. Please try again later.",
-        ) from exc
 
     except Exception as exc:
-
+        # Never log the OTP, API key, or full email body.
         logger.exception(
-            "Unexpected email delivery failure; error_type=%s",
+            "Resend email delivery failed; error_type=%s",
             type(exc).__name__,
         )
-
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unable to send verification email. Please try again later.",
