@@ -1,6 +1,8 @@
 
+import logging
 import os
 import smtplib
+import ssl
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
@@ -68,6 +70,8 @@ from app.security.auth import (
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"],
@@ -104,11 +108,9 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL")
-
-SMTP_USE_TLS = os.getenv(
-    "SMTP_USE_TLS",
-    "true",
-).lower() == "true"
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "20"))
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() == "true"
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").strip().lower() == "true"
 
 
 # =========================================================
@@ -156,25 +158,35 @@ def send_email_otp(
     otp: str,
     purpose: str = "verification",
 ) -> None:
-    if not all([
-        SMTP_HOST,
-        SMTP_USERNAME,
-        SMTP_PASSWORD,
-        SMTP_FROM_EMAIL,
-    ]):
+    """Send an OTP using Gmail SMTP (App Password required for Gmail)."""
+    required_settings = {
+        "SMTP_HOST": SMTP_HOST,
+        "SMTP_USERNAME": SMTP_USERNAME,
+        "SMTP_PASSWORD": SMTP_PASSWORD,
+        "SMTP_FROM_EMAIL": SMTP_FROM_EMAIL,
+    }
+    missing_settings = [name for name, value in required_settings.items() if not value]
+
+    if missing_settings:
+        logger.error("Email configuration is incomplete; missing: %s", ", ".join(missing_settings))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email service is not configured.",
+            detail="Email service is not configured. Check the backend SMTP environment variables.",
+        )
+
+    if SMTP_USE_SSL and SMTP_USE_TLS:
+        logger.error("Invalid SMTP configuration: SMTP_USE_SSL and SMTP_USE_TLS cannot both be true.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email service configuration is invalid.",
         )
 
     if purpose == "registration":
         subject = "IDPS Shield - Email Verification"
         heading = "Verify your email address"
-
     elif purpose == "two_factor":
         subject = "IDPS Shield - Two-Factor Authentication"
         heading = "Your login verification code"
-
     else:
         subject = "IDPS Shield - Verification Code"
         heading = "Your verification code"
@@ -183,10 +195,8 @@ def send_email_otp(
     message["Subject"] = subject
     message["From"] = SMTP_FROM_EMAIL
     message["To"] = recipient
-
     message.set_content(
-        f"""
-Hello,
+        f"""Hello,
 
 {heading}
 
@@ -205,26 +215,52 @@ IDPS Shield Security Team
     )
 
     try:
-        with smtplib.SMTP(
+        tls_context = ssl.create_default_context()
+
+        if SMTP_USE_SSL:
+            # Use only when the SMTP provider supports implicit TLS (commonly port 465).
+            with smtplib.SMTP_SSL(
+                SMTP_HOST,
+                SMTP_PORT,
+                timeout=SMTP_TIMEOUT_SECONDS,
+                context=tls_context,
+            ) as server:
+                server.ehlo()
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(message)
+        else:
+            # Gmail's usual submission setting is port 587 with STARTTLS.
+            with smtplib.SMTP(
+                SMTP_HOST,
+                SMTP_PORT,
+                timeout=SMTP_TIMEOUT_SECONDS,
+            ) as server:
+                server.ehlo()
+                if SMTP_USE_TLS:
+                    server.starttls(context=tls_context)
+                    server.ehlo()
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(message)
+
+    except (smtplib.SMTPException, OSError, TimeoutError, ssl.SSLError):
+        # Keep the detailed exception in Render logs, but never expose credentials
+        # or provider responses to the frontend.
+        logger.exception(
+            "Gmail SMTP delivery failed (host=%s, port=%s, ssl=%s, starttls=%s).",
             SMTP_HOST,
             SMTP_PORT,
-            timeout=15,
-        ) as server:
-
-            if SMTP_USE_TLS:
-                server.starttls()
-
-            server.login(
-                SMTP_USERNAME,
-                SMTP_PASSWORD,
-            )
-
-            server.send_message(message)
-
-    except Exception:
+            SMTP_USE_SSL,
+            SMTP_USE_TLS,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Unable to send verification email.",
+            detail="Unable to send verification email. Check the backend email service and Render logs.",
+        )
+    except Exception:
+        logger.exception("Unexpected error while sending an IDPS verification email.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to send verification email. Check the backend logs.",
         )
 
 
@@ -651,8 +687,15 @@ def register(
         )
 
     except HTTPException:
-        # Keep the pending record so the user can retry
-        # using the resend endpoint.
+        # The registration token is not returned when this endpoint fails.
+        # Remove the newly-created pending row so the user can retry registration
+        # instead of being permanently blocked by a 409 Conflict.
+        try:
+            db.delete(pending)
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception("Could not clean up pending registration after email delivery failed.")
         raise
 
     return RegistrationStartResponse(
