@@ -19,6 +19,7 @@ from app.services.risk_engine import (
     calculate_risk,
     apply_domain_rules,
     is_adult_content_url,
+    get_google_safe_browsing_test_type,
 )
 
 from app.models.security_event import SecurityEvent
@@ -393,39 +394,39 @@ async def check_url(
         url_result = {
             "url": complete_url,
             "domain": hostname,
-            "https_enabled": signals["https_enabled"],
-            "ssl_valid": signals["ssl_valid"],
-            "ssl_status": signals["ssl_status"],
-            "suspicious_url": signals["suspicious_url"],
-            "domain_reputation": signals["domain_reputation"],
+            "https_enabled": signals.get("https_enabled", complete_url.lower().startswith("https://")),
+            "ssl_valid": signals.get("ssl_valid"),
+            "ssl_status": signals.get("ssl_status", "NOT_CHECKED"),
+            "suspicious_url": signals.get("suspicious_url", False),
+            "domain_reputation": signals.get("domain_reputation", "UNKNOWN"),
             # The risk engine reads risk_contribution and findings.
             # A clean URL contributes zero; suspicious structure contributes 20.
-            "risk_contribution": 20 if signals["suspicious_url"] else 0,
+            "risk_contribution": 20 if signals.get("suspicious_url", False) else 0,
             "findings": (
-                [signals["reasons"]]
-                if signals["suspicious_url"] and signals.get("reasons")
+                [signals.get("reasons", [])]
+                if signals.get("suspicious_url", False) and signals.get("reasons")
                 else []
             ),
-            "reasons": signals["reasons"],
+            "reasons": signals.get("reasons", []),
         }
 
         malware_result = {
-            "malware_detected": signals["malware_detected"],
-            "malware_confidence": signals["malware_confidence"],
-            "malware_type": signals["malware_type"],
+            "malware_detected": signals.get("malware_detected", False),
+            "malware_confidence": signals.get("malware_confidence", 0),
+            "malware_type": signals.get("malware_type"),
             "reason": (
                 "Malware indicators detected."
-                if signals["malware_detected"]
+                if signals.get("malware_detected", False)
                 else "No configured malware pattern matched."
             ),
         }
 
         phishing_result = {
-            "phishing_detected": signals["phishing_detected"],
-            "phishing_confidence": signals["phishing_confidence"],
+            "phishing_detected": signals.get("phishing_detected", False),
+            "phishing_confidence": signals.get("phishing_confidence", 0),
             "findings": (
                 ["Phishing indicators detected."]
-                if signals["phishing_detected"]
+                if signals.get("phishing_detected", False)
                 else []
             ),
         }
@@ -546,11 +547,13 @@ async def check_url(
         # 9. EXISTING RISK ENGINE
         # -------------------------------------------------
 
+        safe_browsing_test_type = get_google_safe_browsing_test_type(complete_url)
+
         result = calculate_risk(
             url_result=url_result,
             malware_result=malware_result,
             phishing_result=phishing_result,
-            domain_reputation=signals["domain_reputation"],
+            domain_reputation=signals.get("domain_reputation", "UNKNOWN"),
             strict_safe_browsing=(
                 safe_browsing_enabled and strict_mode_enabled
             ),
@@ -566,6 +569,27 @@ async def check_url(
         if not isinstance(result, dict):
             raise RuntimeError(
                 "calculate_risk() must return a dictionary."
+            )
+
+        # Google's published test URLs are classified by the risk engine.
+        # Mirror that classification in the API response and saved event.
+        malware_detected = bool(result.get("malware_detected", signals.get("malware_detected", False)))
+        phishing_detected = bool(result.get("phishing_detected", signals.get("phishing_detected", False)))
+
+        if safe_browsing_test_type:
+            malware_detected = safe_browsing_test_type == "MALWARE"
+            phishing_detected = safe_browsing_test_type == "PHISHING"
+            malware_result["malware_detected"] = malware_detected
+            malware_result["malware_confidence"] = 100 if malware_detected else 0
+            malware_result["reason"] = (
+                "Google Safe Browsing malware test case matched."
+                if malware_detected else "No malware test case matched."
+            )
+            phishing_result["phishing_detected"] = phishing_detected
+            phishing_result["phishing_confidence"] = 100 if phishing_detected else 0
+            phishing_result["findings"] = (
+                ["Google Safe Browsing phishing test case matched."]
+                if phishing_detected else []
             )
 
         logger.info(
@@ -680,16 +704,16 @@ async def check_url(
         # 13. CLASSIFY EVENT
         # -------------------------------------------------
 
-        if signals["malware_detected"]:
+        if malware_detected:
             event_type = "MALWARE_DETECTED"
 
-        elif signals["phishing_detected"]:
+        elif phishing_detected:
             event_type = "PHISHING_DETECTED"
 
         elif adult_match and age_restriction_enabled and account_age < 18:
             event_type = "AGE_RESTRICTED_CONTENT_BLOCKED"
 
-        elif signals["ssl_valid"] is False:
+        elif signals.get("ssl_valid") is False:
             event_type = "SSL_CERTIFICATE_INVALID"
 
         elif not dns_result["resolved"]:
@@ -775,11 +799,11 @@ async def check_url(
             "dns_message": dns_result["message"],
 
             # HTTPS and SSL
-            "https_enabled": signals["https_enabled"],
+            "https_enabled": signals.get("https_enabled", complete_url.lower().startswith("https://")),
 
-            "ssl_valid": signals["ssl_valid"],
+            "ssl_valid": signals.get("ssl_valid"),
 
-            "ssl_status": signals["ssl_status"],
+            "ssl_status": signals.get("ssl_status", "NOT_CHECKED"),
 
             "ssl_error": signals.get("ssl_error"),
 
@@ -788,21 +812,21 @@ async def check_url(
             # Malware
             "malware": malware_result,
 
-            "malware_detected": signals["malware_detected"],
+            "malware_detected": malware_detected,
 
-            "malware_confidence": signals["malware_confidence"],
+            "malware_confidence": signals.get("malware_confidence", 0),
 
             # Phishing
             "phishing": phishing_result,
 
-            "phishing_detected": signals["phishing_detected"],
+            "phishing_detected": phishing_detected,
 
-            "phishing_confidence": signals["phishing_confidence"],
+            "phishing_confidence": signals.get("phishing_confidence", 0),
 
             # Domain reputation
-            "domain_reputation": signals["domain_reputation"],
+            "domain_reputation": signals.get("domain_reputation", "UNKNOWN"),
 
-            "suspicious_url": signals["suspicious_url"],
+            "suspicious_url": signals.get("suspicious_url", False),
 
             # Age restrictions
             "adult_content_detected": adult_match,
@@ -837,14 +861,13 @@ async def check_url(
 
             "risk_diagnostics": {
                 "url_structure_contribution": url_result.get("risk_contribution", 0),
-                "malware_detected": signals.get("malware_detected", False),
-                "phishing_detected": signals.get("phishing_detected", False),
+                "malware_detected": malware_detected,
+                "phishing_detected": phishing_detected,
                 "domain_reputation": signals.get("domain_reputation", "UNKNOWN"),
                 "ssl_status": signals.get("ssl_status", "NOT_CHECKED"),
                 "risk_engine_ssl_status": result.get("ssl_status", "NOT_CHECKED"),
-                "risk_engine_ssl_status": result.get("ssl_status", "NOT_CHECKED"),
                 "ssl_problem": result.get("ssl_problem", False),
-                "ssl_problem": result.get("ssl_problem", False),
+                "safe_browsing_test_type": safe_browsing_test_type,
                 "dns_status": dns_result.get("status", "UNKNOWN"),
                 "strict_safe_browsing": (
                     safe_browsing_enabled and strict_mode_enabled

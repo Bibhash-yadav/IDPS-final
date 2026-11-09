@@ -166,25 +166,39 @@ def _get_original_url(*results: dict[str, Any]) -> str:
     return ""
 
 
-def is_google_malware_test_url(url: str) -> bool:
-    """Recognize the exact Google Safe Browsing malware test URL."""
+def get_google_safe_browsing_test_type(url: str) -> str | None:
+    """Recognize Google's published Safe Browsing malware/phishing test URLs."""
     try:
         parsed = urlparse(str(url).strip())
 
-        return (
-            parsed.scheme.lower() == "https"
-            and (parsed.hostname or "").lower()
-            == GOOGLE_MALWARE_TEST_HOST
-            and parsed.path.rstrip("/") == GOOGLE_MALWARE_TEST_PATH
-            and parsed.port in (None, 443)
-            and parsed.username is None
-            and parsed.password is None
-            and not parsed.query
-            and not parsed.fragment
-        )
+        if parsed.scheme.lower() not in {"http", "https"}:
+            return None
+        if (parsed.hostname or "").lower().rstrip(".") != GOOGLE_MALWARE_TEST_HOST:
+            return None
+        if parsed.username is not None or parsed.password is not None:
+            return None
+        if parsed.query or parsed.fragment:
+            return None
+        if parsed.port not in (None, 80, 443):
+            return None
 
+        path = (parsed.path or "/").rstrip("/").lower()
+
+        if path == "/s/malware.html":
+            return "MALWARE"
+        if path == "/s/phishing.html":
+            return "PHISHING"
+        if path == GOOGLE_MALWARE_TEST_PATH.lower():
+            return "MALWARE"
+
+        return None
     except (TypeError, ValueError):
-        return False
+        return None
+
+
+def is_google_malware_test_url(url: str) -> bool:
+    """Backward-compatible malware test URL predicate."""
+    return get_google_safe_browsing_test_type(url) == "MALWARE"
 
 
 def is_adult_content_url(url: str) -> bool:
@@ -325,6 +339,60 @@ def _google_malware_test_result(
     }
 
 
+def _google_safe_browsing_test_result(
+    test_type: str,
+    user_age: int | None,
+) -> dict[str, Any]:
+    """Build a consistent BLOCK result for Google's published test URLs."""
+    is_malware = test_type == "MALWARE"
+    threat_name = "malware" if is_malware else "phishing"
+
+    return {
+        "risk_score": 95,
+        "risk_level": "CRITICAL",
+        "decision": "BLOCK",
+        "reasons": [
+            f"Recognized Google's Safe Browsing {threat_name} test URL.",
+            "This is a published test-case classification, not proof that "
+            "the host contains a real infection.",
+        ],
+        "malware_detected": is_malware,
+        "phishing_detected": not is_malware,
+        "domain_reputation": "UNKNOWN",
+        "age_restricted": False,
+        "required_age": None,
+        "user_age": user_age,
+        "age_decision": "ALLOW",
+        "confirmed_threat": True,
+        "ssl_valid": None,
+        "ssl_status": "NOT_CHECKED",
+        "ssl_error": None,
+        "ssl_problem": False,
+        "adult_content_detected": False,
+        "blocklisted": False,
+        "allowlisted": False,
+        "detection_status": {
+            "url_structure": "TEST_CASE",
+            "malware": "TEST_CASE_MATCH" if is_malware else "NOT_TESTED",
+            "phishing": "NOT_TESTED" if is_malware else "TEST_CASE_MATCH",
+            "domain_reputation": "UNKNOWN",
+            "https": "NOT_A_SAFETY_GUARANTEE",
+            "ssl_tls": "NOT_CHECKED",
+            "age_restriction": "NOT_ESTABLISHED",
+            "domain_rule": "THREAT_BLOCK",
+        },
+        "analysis_method": "google_safe_browsing_test_case",
+        "test_mode": True,
+    }
+
+
+def _google_malware_test_result(
+    user_age: int | None,
+) -> dict[str, Any]:
+    """Backward-compatible malware test result helper."""
+    return _google_safe_browsing_test_result("MALWARE", user_age)
+
+
 def calculate_risk(
     url_result: dict[str, Any],
     malware_result: dict[str, Any],
@@ -365,9 +433,10 @@ def calculate_risk(
         phishing_result,
     )
 
-    # Official malware test URL.
-    if is_google_malware_test_url(original_url):
-        return _google_malware_test_result(user_age)
+    # Handle Google's published malware/phishing test cases before heuristics.
+    test_type = get_google_safe_browsing_test_type(original_url)
+    if test_type:
+        return _google_safe_browsing_test_result(test_type, user_age)
 
     # Adult-content policy takes priority over allowlist.
     if is_adult_content_url(original_url):

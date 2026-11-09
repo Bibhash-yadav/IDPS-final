@@ -577,7 +577,7 @@ function DomainList({
             <p className="text-sm">No {isAllow ? "allowed" : "blocked"} websites yet.</p>
           </div>
         ) : (
-          domains.map((rule) => (
+          domains.map((rule, index) => (
             <div
               key={rule.id}
               className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-3 ${
@@ -586,17 +586,19 @@ function DomainList({
                   : "border-slate-200 bg-white/60"
               }`}
             >
-              <div className="min-w-0">
-                <p className={`break-all text-sm font-medium ${
+              <div className="flex min-w-0 items-start gap-3">
+                <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                  isAllow
+                    ? "bg-emerald-500/10 text-emerald-500"
+                    : "bg-red-500/10 text-red-500"
+                }`}>
+                  {index + 1}
+                </span>
+
+                <p className={`min-w-0 break-all pt-0.5 text-sm font-medium ${
                   isDark ? "text-slate-200" : "text-slate-700"
                 }`}>
                   {rule.domain}
-                </p>
-
-                <p className={`mt-1 text-[11px] ${
-                  isAllow ? "text-emerald-500" : "text-red-500"
-                }`}>
-                  {rule.rule_type} · ID {rule.id}
                 </p>
               </div>
 
