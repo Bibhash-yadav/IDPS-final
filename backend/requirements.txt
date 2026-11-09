@@ -22,4 +22,3 @@ numpy==1.26.4
 
 pyotp==2.9.0
 cryptography>=42.0.0
-resend
