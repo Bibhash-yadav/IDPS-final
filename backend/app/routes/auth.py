@@ -1,4 +1,4 @@
-
+import logging
 import os
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -67,6 +67,8 @@ from app.security.auth import (
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/auth",
@@ -156,6 +158,7 @@ def send_email_otp(
     otp: str,
     purpose: str = "verification",
 ) -> None:
+
     if not all([
         SMTP_HOST,
         SMTP_USERNAME,
@@ -180,6 +183,7 @@ def send_email_otp(
         heading = "Your verification code"
 
     message = EmailMessage()
+
     message["Subject"] = subject
     message["From"] = SMTP_FROM_EMAIL
     message["To"] = recipient
@@ -221,18 +225,40 @@ IDPS Shield Security Team
 
             server.send_message(message)
 
-    except Exception:
+    except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+
+        logger.exception(
+            "SMTP delivery failed for recipient domain=%s; error_type=%s",
+            recipient.rsplit("@", 1)[-1] if "@" in recipient else "unknown",
+            type(exc).__name__,
+        )
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Unable to send verification email.",
+            detail="Unable to send verification email. Please try again later.",
+        ) from exc
+
+    except Exception as exc:
+
+        logger.exception(
+            "Unexpected email delivery failure; error_type=%s",
+            type(exc).__name__,
         )
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to send verification email. Please try again later.",
+        ) from exc
 
 
 # =========================================================
 # OTP HELPERS
 # =========================================================
 
-def check_resend_cooldown(last_sent_at: datetime | None) -> None:
+def check_resend_cooldown(
+    last_sent_at: datetime | None,
+) -> None:
+
     if not last_sent_at:
         return
 
@@ -241,6 +267,7 @@ def check_resend_cooldown(last_sent_at: datetime | None) -> None:
     ).total_seconds()
 
     if elapsed < OTP_RESEND_SECONDS:
+
         remaining = int(
             OTP_RESEND_SECONDS - elapsed
         ) + 1
@@ -277,6 +304,7 @@ def validate_otp_fields(
 
 
 def clear_otp_fields(record) -> None:
+
     record.email_otp_hash = None
     record.email_otp_expires_at = None
     record.email_otp_attempts = 0
@@ -296,9 +324,11 @@ def send_pending_registration_otp(
     otp = generate_email_otp()
 
     pending.email_otp_hash = hash_otp(otp)
+
     pending.email_otp_expires_at = (
         utc_now() + timedelta(minutes=OTP_EXPIRE_MINUTES)
     )
+
     pending.email_otp_attempts = 0
     pending.email_otp_last_sent_at = utc_now()
 
@@ -326,9 +356,11 @@ def create_and_send_user_otp(
     otp = generate_email_otp()
 
     user.email_otp_hash = hash_otp(otp)
+
     user.email_otp_expires_at = (
         utc_now() + timedelta(minutes=OTP_EXPIRE_MINUTES)
     )
+
     user.email_otp_attempts = 0
     user.email_otp_last_sent_at = utc_now()
 
@@ -357,6 +389,7 @@ def validate_user_email_otp(
     )
 
     if not valid:
+
         user.email_otp_attempts = (
             user.email_otp_attempts or 0
         ) + 1
@@ -403,8 +436,6 @@ def get_current_user(
             detail="User account not found.",
         )
 
-    # Defense in depth: an account without completed
-    # email verification and 2FA cannot use protected APIs.
     if (
         not user.email_verified
         or not user.two_factor_enabled
@@ -591,6 +622,7 @@ def register(
     )
 
     if existing_pending:
+
         if (
             utc_now()
             < normalize_datetime(existing_pending.expires_at)
@@ -651,8 +683,22 @@ def register(
         )
 
     except HTTPException:
-        # Keep the pending record so the user can retry
-        # using the resend endpoint.
+
+        # Remove the pending record when the first email fails.
+        # The frontend does not receive the registration token
+        # when this operation fails.
+
+        try:
+            db.delete(pending)
+            db.commit()
+
+        except SQLAlchemyError:
+            db.rollback()
+
+            logger.exception(
+                "Could not remove pending registration after email delivery failure."
+            )
+
         raise
 
     return RegistrationStartResponse(
@@ -725,6 +771,7 @@ def verify_registration_email(
     )
 
     if not valid:
+
         pending.email_otp_attempts = (
             pending.email_otp_attempts or 0
         ) + 1
@@ -778,7 +825,6 @@ def select_registration_2fa_method(
 
     pending.two_factor_method = data.method
 
-    # Reset any previous unconfirmed authenticator setup.
     pending.totp_secret = None
     pending.totp_last_used_step = None
 
@@ -962,6 +1008,7 @@ def complete_registration(
         )
 
         if not valid:
+
             pending.email_otp_attempts = (
                 pending.email_otp_attempts or 0
             ) + 1
@@ -1026,8 +1073,6 @@ def complete_registration(
     try:
         db.add(user)
 
-        # Deleting the pending row invalidates all enrollment
-        # tokens for this registration.
         db.delete(pending)
 
         db.commit()
@@ -1098,7 +1143,6 @@ def login(
             detail="Email verification is required. Contact support to recover or complete your account verification.",
         )
 
-    # Never issue an access token to an account without 2FA.
     if (
         not user.two_factor_enabled
         or user.two_factor_method not in ("totp", "email")
@@ -1229,6 +1273,7 @@ def verify_login_2fa(
             user,
             data.code,
         ):
+
             commit_changes(
                 db,
                 "Unable to update OTP verification attempts.",
@@ -1446,6 +1491,7 @@ def confirm_email_otp_setup(
         current_user,
         data.code,
     ):
+
         commit_changes(
             db,
             "Unable to update verification attempts.",
